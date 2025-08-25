@@ -4,7 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 type AuthContextValue = {
   isLoggedIn: boolean;
   token: string | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email?: string, password?: string) => Promise<void>;
   logout: () => void;
 };
 
@@ -24,7 +24,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     else localStorage.removeItem("auth_token");
   }, [token]);
 
-  const login = useCallback(async () => {
+  const login = useCallback(async (_email?: string, _password?: string) => {
+  // Referenciar argumentos para evitar advertencias de no-usados en lint/ts
+  void _email;
+  void _password;
     // Si ya guardaste tokens reales en localStorage desde la pantalla de login,
     // usa el access_token para marcar la sesión como activa.
     const access = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;

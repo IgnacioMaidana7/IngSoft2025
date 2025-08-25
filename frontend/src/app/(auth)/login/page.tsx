@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
@@ -10,11 +10,18 @@ import { loginSupermercado } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, isLoggedIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Si ya hay sesión activa, no permitir ver el login ni volver con atrás
+  useEffect(() => {
+    if (isLoggedIn) {
+      router.replace("/dashboard");
+    }
+  }, [isLoggedIn, router]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,9 +38,10 @@ export default function LoginPage() {
       localStorage.setItem('refresh_token', response.refresh);
       
       // Actualizar contexto de autenticación
-      await login(email, password);
+      await login();
       
-      router.push("/dashboard");
+      // replace evita que el historial permita volver al login
+      router.replace("/dashboard");
     } catch (error: unknown) {
       console.error('Error en login:', error);
       const errorMessage = error instanceof Error ? error.message : 'Error al iniciar sesión. Verifica tus credenciales.';

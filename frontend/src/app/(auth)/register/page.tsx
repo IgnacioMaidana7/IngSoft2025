@@ -5,9 +5,11 @@ import Link from "next/link";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import { registerSupermercado } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 export default function RegisterPage() {
 	const router = useRouter();
+	const { isLoggedIn } = useAuth();
 	const [username, setUsername] = useState("");
 	const [nombreSuper, setNombreSuper] = useState("");
 	const [cuil, setCuil] = useState("");
@@ -23,6 +25,10 @@ export default function RegisterPage() {
 	const [error, setError] = useState("");
 
 	useEffect(() => {
+		// Si ya hay sesión activa, no permitir ver el registro
+		if (isLoggedIn) {
+			router.replace("/dashboard");
+		}
 		(async () => {
 			try {
 				const res = await fetch('https://apis.datos.gob.ar/georef/api/provincias?campos=id,nombre');
@@ -34,7 +40,7 @@ export default function RegisterPage() {
                 );
 			} catch {}
 		})();
-	}, []);
+    }, [isLoggedIn, router]);
 
 	useEffect(() => {
 		if (!provincia) return;
@@ -172,7 +178,8 @@ export default function RegisterPage() {
 			await registerSupermercado(data);
 			
 			alert('¡Registro exitoso! Ahora puedes iniciar sesión con tu cuenta.');
-			router.push('/login');
+			// replace para que no se pueda volver al formulario con Atrás
+			router.replace('/login');
 		} catch (error: unknown) {
 			console.error('Error en registro:', error);
 			const errorMessage = error instanceof Error ? error.message : 'Error al crear la cuenta. Por favor intenta nuevamente.';
