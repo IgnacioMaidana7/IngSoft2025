@@ -1,176 +1,193 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Container from "@/components/layout/Container";
 import Card from "@/components/layout/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-
-type DepositItem = {
-  id: string;
-  nombre: string;
-  direccion: string;
-};
-
-// Componente inline simple para reemplazar DepositListItem
-function DepositListItem({ item, onEdit, onViewStock }: { item: DepositItem; onEdit: () => void; onViewStock: () => void }) {
-  return (
-    <div className="border border-border rounded-xl p-4 bg-white">
-      <div className="flex justify-between items-start">
-        <div>
-          <h3 className="font-semibold text-text">{item.nombre}</h3>
-          <p className="text-lightText text-sm">{item.direccion}</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={onViewStock}>
-            Ver Stock
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onEdit}>
-            Editar
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const mockDeposits: DepositItem[] = [
-  { id: '1', nombre: 'Depósito Central', direccion: 'Av. Siempre Viva 742' },
-  { id: '2', nombre: 'Sucursal Norte', direccion: 'Calle Falsa 123' },
-  { id: '3', nombre: 'Almacén Sur', direccion: 'Boulevar Libertad 456' },
-  { id: '4', nombre: 'Centro Logístico', direccion: 'Ruta Nacional 67 Km 15' },
-];
+import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/components/feedback/ToastProvider";
+import { 
+  obtenerDepositos, 
+  eliminarDeposito,
+  Deposito 
+} from "@/lib/api";
 
 export default function DepositosPage() {
-  const [searchTerm, setSearchTerm] = useState("");
+  const { token } = useAuth();
+  const { showToast } = useToast();
+  
+  const [depositos, setDepositos] = useState<Deposito[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busqueda, setBusqueda] = useState<string>('');
 
-  const filteredDeposits = mockDeposits.filter(deposit =>
-    deposit.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    deposit.direccion.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Cargar depósitos
+  useEffect(() => {
+    if (!token) return;
+    
+    const cargarDepositos = async () => {
+      try {
+        setLoading(true);
+        const depositosData = await obtenerDepositos(token);
+        // Asegurar que depositosData es un array
+        setDepositos(Array.isArray(depositosData) ? depositosData : []);
+      } catch (error) {
+        console.error('Error al cargar depósitos:', error);
+        showToast(`Error al cargar depósitos: ${error}`, 'error');
+        // En caso de error, establecer array vacío
+        setDepositos([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    cargarDepositos();
+  }, [token, showToast]);
+
+  const handleEliminarDeposito = async (id: number, nombre: string) => {
+    if (!token) return;
+    
+    if (window.confirm(`¿Estás seguro de que deseas eliminar el depósito "${nombre}"?`)) {
+      try {
+        await eliminarDeposito(id, token);
+        setDepositos(depositos?.filter(d => d.id !== id) || []);
+        showToast('Depósito eliminado correctamente', 'success');
+      } catch (error) {
+        showToast(`Error al eliminar depósito: ${error}`, 'error');
+      }
+    }
+  };
+
+  // Filtrar depósitos por búsqueda
+  const depositosFiltrados = depositos?.filter(deposito =>
+    deposito.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+    deposito.direccion.toLowerCase().includes(busqueda.toLowerCase())
+  ) || [];
+
+  if (loading) {
+    return (
+      <Container>
+        <Card>
+          <div className="text-center py-8">
+            <div className="text-lg">Cargando depósitos...</div>
+          </div>
+        </Card>
+      </Container>
+    );
+  }
 
   return (
-    <Container size="xl">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-4 mb-6">
-          <div className="w-12 h-12 bg-gradient-to-br from-primary to-primary/80 rounded-2xl flex items-center justify-center text-white text-2xl shadow-xl shadow-primary/30">
-            🏪
-          </div>
+    <Container>
+      <Card>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6 pb-4 border-b border-border">
           <div>
             <h1 className="text-3xl font-bold text-text mb-1">Gestión de Depósitos</h1>
-            <p className="text-lightText">Administra tus ubicaciones de almacenamiento</p>
+            <p className="text-lightText">Administra las ubicaciones de almacenamiento</p>
+          </div>
+          <Button 
+            onClick={() => window.location.href = '/inventario/depositos/nuevo'}
+            className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors"
+          >
+            + Nuevo Depósito
+          </Button>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="bg-gradient-to-r from-blue-50 to-blue-100 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-blue-600">{depositos?.length || 0}</div>
+            <div className="text-sm text-blue-700">Total Depósitos</div>
+          </div>
+          <div className="bg-gradient-to-r from-green-50 to-green-100 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-green-600">
+              {depositos?.filter(d => d.activo).length || 0}
+            </div>
+            <div className="text-sm text-green-700">Depósitos Activos</div>
+          </div>
+          <div className="bg-gradient-to-r from-orange-50 to-orange-100 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-orange-600">
+              {depositos?.filter(d => !d.activo).length || 0}
+            </div>
+            <div className="text-sm text-orange-700">Inactivos</div>
           </div>
         </div>
-      </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <Card variant="gradient" padding="sm" className="text-center">
-          <div className="text-2xl font-bold text-primary mb-1">{mockDeposits.length}</div>
-          <div className="text-sm text-lightText">Total Depósitos</div>
-        </Card>
-        <Card variant="gradient" padding="sm" className="text-center">
-          <div className="text-2xl font-bold text-green-600 mb-1">3</div>
-          <div className="text-sm text-lightText">Activos</div>
-        </Card>
-        <Card variant="gradient" padding="sm" className="text-center">
-          <div className="text-2xl font-bold text-blue-600 mb-1">85%</div>
-          <div className="text-sm text-lightText">Ocupación Promedio</div>
-        </Card>
-        <Card variant="gradient" padding="sm" className="text-center">
-          <div className="text-2xl font-bold text-orange-600 mb-1">2</div>
-          <div className="text-sm text-lightText">Alertas Pendientes</div>
-        </Card>
-      </div>
-
-      {/* Search and Actions */}
-      <Card variant="elevated" className="mb-8">
-        <div className="flex flex-col md:flex-row gap-4 md:items-center md:justify-between">
-          <div className="flex-1 max-w-md">
-            <Input
-              placeholder="Buscar depósitos..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              icon={
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              }
-            />
-          </div>
-          
-          <div className="flex gap-3">
-            <Button
-              variant="ghost"
-              icon={
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              }
-              onClick={() => alert('Ver reportes')}
-            >
-              Reportes
-            </Button>
-            <Button
-              icon={
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-              }
-              onClick={() => alert('Nuevo depósito')}
-            >
-              Nuevo Depósito
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      {/* Deposits List */}
-      <Card>
+        {/* Búsqueda */}
         <div className="mb-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-text">
-              Depósitos ({filteredDeposits.length})
-            </h2>
-            {searchTerm && (
-              <div className="text-sm text-lightText">
-                Mostrando resultados para &ldquo;{searchTerm}&rdquo;
-              </div>
+          <Input
+            label="Buscar depósito"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Nombre o dirección del depósito"
+          />
+        </div>
+
+        {/* Lista de depósitos */}
+        {depositosFiltrados.length === 0 ? (
+          <div className="text-center py-8">
+            <div className="text-gray-500 mb-4">
+              {depositos.length === 0 
+                ? 'No hay depósitos registrados' 
+                : 'No se encontraron depósitos con esos criterios'
+              }
+            </div>
+            {depositos.length === 0 && (
+              <Button onClick={() => window.location.href = '/inventario/depositos/nuevo'}>
+                Crear el primer depósito
+              </Button>
             )}
           </div>
-        </div>
-        
-        {filteredDeposits.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center mx-auto mb-4">
-              <svg className="w-10 h-10 text-primary/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h4a1 1 0 011 1v5m-6 0V9a1 1 0 011-1h4a1 1 0 011 1v11" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-semibold text-text mb-2">No se encontraron depósitos</h3>
-            <p className="text-lightText mb-6">
-              {searchTerm ? 'Intenta con otros términos de búsqueda' : 'Agrega tu primer depósito para comenzar'}
-            </p>
-            <Button
-              onClick={() => alert('Nuevo depósito')}
-              icon={
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-              }
-            >
-              Agregar Depósito
-            </Button>
-          </div>
         ) : (
-          <div className="space-y-1">
-            {filteredDeposits.map((deposit) => (
-              <DepositListItem 
-                key={deposit.id} 
-                item={deposit} 
-                onEdit={() => alert('Editar ' + deposit.nombre)} 
-                onViewStock={() => alert('Ver stock ' + deposit.nombre)} 
-              />
+          <div className="space-y-4">
+            {depositosFiltrados.map((deposito) => (
+              <div key={deposito.id} className="border border-border rounded-lg p-4 hover:shadow-md transition-shadow">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="font-semibold text-lg text-text">{deposito.nombre}</h3>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        deposito.activo 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {deposito.activo ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </div>
+                    <div className="text-sm text-lightText space-y-1">
+                      <div><strong>Dirección:</strong> {deposito.direccion}</div>
+                      {deposito.descripcion && (
+                        <div><strong>Descripción:</strong> {deposito.descripcion}</div>
+                      )}
+                      <div><strong>Creado:</strong> {new Date(deposito.fecha_creacion).toLocaleDateString()}</div>
+                      {deposito.fecha_modificacion !== deposito.fecha_creacion && (
+                        <div><strong>Modificado:</strong> {new Date(deposito.fecha_modificacion).toLocaleDateString()}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="ghost"
+                      onClick={() => alert(`Ver stock de ${deposito.nombre} - Función por implementar`)}
+                      className="text-blue-600 hover:text-blue-700 px-3 py-1 border border-blue-600 rounded hover:bg-blue-50 transition-colors"
+                    >
+                      Ver Stock
+                    </Button>
+                    <Button 
+                      variant="ghost"
+                      onClick={() => window.location.href = `/inventario/depositos/${deposito.id}`}
+                      className="text-primary hover:text-primary/80 px-3 py-1 border border-primary rounded hover:bg-primary/10 transition-colors"
+                    >
+                      Editar
+                    </Button>
+                    <button 
+                      onClick={() => handleEliminarDeposito(deposito.id, deposito.nombre)}
+                      className="text-red-600 hover:text-red-700 px-3 py-1 border border-red-600 rounded hover:bg-red-50 transition-colors"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -178,5 +195,3 @@ export default function DepositosPage() {
     </Container>
   );
 }
-
-

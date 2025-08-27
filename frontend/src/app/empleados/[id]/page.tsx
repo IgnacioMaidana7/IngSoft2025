@@ -1,26 +1,31 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
-import { useRouter } from "next/navigation";
 import Container from "@/components/layout/Container";
 import Card from "@/components/layout/Card";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useAuth } from "@/context/AuthContext";
 import { 
-  crearEmpleado, 
+  obtenerEmpleado,
+  actualizarEmpleado, 
   obtenerDepositosDisponibles, 
   obtenerRolesDisponibles,
+  Empleado,
   Deposito,
-  Role,
-  EmpleadoCreate 
+  Role 
 } from "@/lib/api";
 
-export default function NuevoEmpleadoPage() {
+export default function EditarEmpleadoPage() {
+  const params = useParams();
   const router = useRouter();
   const { showToast } = useToast();
   const { token } = useAuth();
   
+  const empleadoId = params.id as string;
+  
+  const [empleado, setEmpleado] = useState<Empleado | null>(null);
   const [nombre, setNombre] = useState("");
   const [apellido, setApellido] = useState("");
   const [email, setEmail] = useState("");
@@ -35,32 +40,42 @@ export default function NuevoEmpleadoPage() {
 
   // Cargar datos iniciales
   useEffect(() => {
-    if (!token) return;
+    if (!token || !empleadoId) return;
     
     const cargarDatos = async () => {
       try {
-        const [depositosData, rolesData] = await Promise.all([
+        const [empleadoData, depositosData, rolesData] = await Promise.all([
+          obtenerEmpleado(parseInt(empleadoId), token),
           obtenerDepositosDisponibles(token),
           obtenerRolesDisponibles(token)
         ]);
+        
+        setEmpleado(empleadoData);
+        setNombre(empleadoData.nombre);
+        setApellido(empleadoData.apellido);
+        setEmail(empleadoData.email);
+        setDni(empleadoData.dni);
+        setPuesto(empleadoData.puesto);
+        setDeposito(empleadoData.deposito);
         
         setDepositos(depositosData.depositos);
         setRoles(rolesData.roles);
       } catch (error) {
         showToast(`Error al cargar datos: ${error}`, 'error');
+        router.push('/empleados');
       } finally {
         setLoadingData(false);
       }
     };
 
     cargarDatos();
-  }, [token, showToast]);
+  }, [token, empleadoId, showToast, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!token) {
-      showToast('No estás autenticado', 'error');
+    if (!token || !empleado) {
+      showToast('No estás autenticado o no se cargaron los datos', 'error');
       return;
     }
 
@@ -107,21 +122,20 @@ export default function NuevoEmpleadoPage() {
     try {
       setLoading(true);
       
-      const nuevoEmpleado: EmpleadoCreate = {
+      const datosActualizados = {
         nombre: nombre.trim(),
         apellido: apellido.trim(),
         email: email.trim().toLowerCase(),
         dni: dni.trim(),
         puesto,
-        deposito: deposito as number,
-        password: dni.trim() // La contraseña será el DNI
+        deposito: deposito as number
       };
 
-      await crearEmpleado(nuevoEmpleado, token);
-      showToast('Empleado registrado exitosamente', 'success');
+      await actualizarEmpleado(empleado.id, datosActualizados, token);
+      showToast('Empleado actualizado exitosamente', 'success');
       router.push('/empleados');
     } catch (error) {
-      showToast(`Error al registrar empleado: ${error}`, 'error');
+      showToast(`Error al actualizar empleado: ${error}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -132,7 +146,19 @@ export default function NuevoEmpleadoPage() {
       <Container>
         <Card>
           <div className="text-center py-8">
-            <div className="text-lg">Cargando formulario...</div>
+            <div className="text-lg">Cargando datos del empleado...</div>
+          </div>
+        </Card>
+      </Container>
+    );
+  }
+
+  if (!empleado) {
+    return (
+      <Container>
+        <Card>
+          <div className="text-center py-8">
+            <div className="text-lg text-red-600">No se pudo cargar el empleado</div>
           </div>
         </Card>
       </Container>
@@ -143,8 +169,8 @@ export default function NuevoEmpleadoPage() {
     <Container>
       <Card>
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-text mb-1">Registrar Empleado</h1>
-          <p className="text-lightText">Complete la información del nuevo empleado</p>
+          <h1 className="text-3xl font-bold text-text mb-1">Editar Empleado</h1>
+          <p className="text-lightText">Modifica la información de {empleado.nombre_completo}</p>
         </div>
         
         <form onSubmit={handleSubmit} className="max-w-lg space-y-4">
@@ -227,16 +253,22 @@ export default function NuevoEmpleadoPage() {
             </div>
           </div>
 
-          {/* Información de Acceso */}
+          {/* Información adicional */}
           <div className="space-y-4">
             <h2 className="text-xl font-semibold text-text border-b border-border pb-2">
-              Información de Acceso
+              Información Adicional
             </h2>
-            <div className="p-4 bg-blue-50 rounded-lg">
-              <p className="text-sm text-blue-700">
-                <strong>Importante:</strong> La contraseña del empleado será su DNI por defecto. 
-                El empleado podrá cambiarla una vez que acceda al sistema.
-              </p>
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="font-medium">Fecha de ingreso:</span>
+                  <div>{new Date(empleado.fecha_ingreso).toLocaleDateString()}</div>
+                </div>
+                <div>
+                  <span className="font-medium">Última modificación:</span>
+                  <div>{new Date(empleado.fecha_modificacion).toLocaleDateString()}</div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -247,7 +279,7 @@ export default function NuevoEmpleadoPage() {
               disabled={loading}
               className={loading ? 'opacity-50 cursor-not-allowed' : ''}
             >
-              {loading ? 'Guardando...' : 'Guardar Empleado'}
+              {loading ? 'Guardando...' : 'Guardar Cambios'}
             </Button>
             <Button 
               type="button"
@@ -263,5 +295,3 @@ export default function NuevoEmpleadoPage() {
     </Container>
   );
 }
-
-

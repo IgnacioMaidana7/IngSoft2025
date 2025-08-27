@@ -156,4 +156,166 @@ export async function loginSupermercado(data: LoginData): Promise<AuthResponse> 
   });
 }
 
+// Interfaces para empleados y depósitos
+export interface Deposito {
+  id: number;
+  nombre: string;
+  direccion: string;
+  descripcion?: string;
+  activo: boolean;
+  fecha_creacion: string;
+  fecha_modificacion: string;
+}
+
+export interface DepositoCreate {
+  nombre: string;
+  direccion: string;
+  descripcion?: string;
+}
+
+export interface Empleado {
+  id: number;
+  nombre: string;
+  apellido: string;
+  email: string;
+  dni: string;
+  puesto: 'CAJERO' | 'REPONEDOR';
+  deposito: number;
+  deposito_nombre: string;
+  nombre_completo: string;
+  activo: boolean;
+  fecha_ingreso: string;
+  fecha_modificacion: string;
+}
+
+export interface EmpleadoCreate {
+  nombre: string;
+  apellido: string;
+  email: string;
+  dni: string;
+  puesto: 'CAJERO' | 'REPONEDOR';
+  deposito: number;
+  password?: string;
+}
+
+export interface Role {
+  value: string;
+  label: string;
+}
+
+export interface EstadisticasEmpleados {
+  total_empleados: number;
+  empleados_por_puesto: Record<string, number>;
+  empleados_por_deposito: Record<string, number>;
+}
+
+// Funciones para gestión de depósitos
+export async function obtenerDepositos(token: string): Promise<Deposito[]> {
+  return apiFetch<Deposito[]>('/api/empleados/depositos/', {
+    method: 'GET',
+    token
+  });
+}
+
+export async function crearDeposito(data: DepositoCreate, token: string): Promise<Deposito> {
+  return apiFetch<Deposito>('/api/empleados/depositos/', {
+    method: 'POST',
+    body: data,
+    token
+  });
+}
+
+export async function actualizarDeposito(id: number, data: Partial<DepositoCreate>, token: string): Promise<Deposito> {
+  return apiFetch<Deposito>(`/api/empleados/depositos/${id}/`, {
+    method: 'PUT',
+    body: data,
+    token
+  });
+}
+
+export async function eliminarDeposito(id: number, token: string): Promise<void> {
+  return apiFetch<void>(`/api/empleados/depositos/${id}/`, {
+    method: 'DELETE',
+    token
+  });
+}
+
+export async function obtenerDeposito(id: number, token: string): Promise<Deposito> {
+  return apiFetch<Deposito>(`/api/empleados/depositos/${id}/`, {
+    method: 'GET',
+    token
+  });
+}
+
+export async function obtenerDepositosDisponibles(token: string): Promise<{ depositos: Deposito[] }> {
+  return apiFetch<{ depositos: Deposito[] }>('/api/empleados/depositos/disponibles/', {
+    method: 'GET',
+    token
+  });
+}
+
+// Funciones para gestión de empleados
+export async function obtenerEmpleados(token: string, filtros?: {
+  puesto?: string;
+  deposito?: number;
+  search?: string;
+}): Promise<Empleado[]> {
+  const params = new URLSearchParams();
+  if (filtros?.puesto) params.append('puesto', filtros.puesto);
+  if (filtros?.deposito) params.append('deposito', filtros.deposito.toString());
+  if (filtros?.search) params.append('search', filtros.search);
+  
+  const queryString = params.toString();
+  const path = queryString ? `/api/empleados/?${queryString}` : '/api/empleados/';
+  
+  return apiFetch<Empleado[]>(path, {
+    method: 'GET',
+    token
+  });
+}
+
+export async function obtenerEmpleado(id: number, token: string): Promise<Empleado> {
+  return apiFetch<Empleado>(`/api/empleados/${id}/`, {
+    method: 'GET',
+    token
+  });
+}
+
+export async function crearEmpleado(data: EmpleadoCreate, token: string): Promise<Empleado> {
+  return apiFetch<Empleado>('/api/empleados/', {
+    method: 'POST',
+    body: data,
+    token
+  });
+}
+
+export async function actualizarEmpleado(id: number, data: Partial<EmpleadoCreate>, token: string): Promise<Empleado> {
+  return apiFetch<Empleado>(`/api/empleados/${id}/`, {
+    method: 'PUT',
+    body: data,
+    token
+  });
+}
+
+export async function eliminarEmpleado(id: number, token: string): Promise<void> {
+  return apiFetch<void>(`/api/empleados/${id}/`, {
+    method: 'DELETE',
+    token
+  });
+}
+
+export async function obtenerRolesDisponibles(token: string): Promise<{ roles: Role[] }> {
+  return apiFetch<{ roles: Role[] }>('/api/empleados/roles/', {
+    method: 'GET',
+    token
+  });
+}
+
+export async function obtenerEstadisticasEmpleados(token: string): Promise<EstadisticasEmpleados> {
+  return apiFetch<EstadisticasEmpleados>('/api/empleados/estadisticas/', {
+    method: 'GET',
+    token
+  });
+}
+
 
