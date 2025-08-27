@@ -42,9 +42,12 @@ export default function EmpleadosPage() {
           obtenerRolesDisponibles(token)
         ]);
         
-        // Asegurar que empleadosData es un array
-        setEmpleados(Array.isArray(empleadosData) ? empleadosData : []);
-        setDepositos(depositosData?.depositos || []);
+        console.log('Empleados recibidos:', empleadosData);
+        console.log('Depósitos recibidos:', depositosData);
+        console.log('Roles recibidos:', rolesData);
+        
+        setEmpleados(empleadosData);
+        setDepositos(depositosData?.data || []);
         setRoles(rolesData?.roles || []);
       } catch (error) {
         console.error('Error al cargar datos:', error);

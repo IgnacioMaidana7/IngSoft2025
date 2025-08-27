@@ -211,14 +211,23 @@ export interface EstadisticasEmpleados {
 
 // Funciones para gestión de depósitos
 export async function obtenerDepositos(token: string): Promise<Deposito[]> {
-  return apiFetch<Deposito[]>('/api/empleados/depositos/', {
-    method: 'GET',
-    token
-  });
+  console.log('obtenerDepositos - Iniciando solicitud a API');
+  try {
+    const result = await apiFetch<{count: number, results: Deposito[]}>('/api/inventario/depositos/', {
+      method: 'GET',
+      token
+    });
+    console.log('obtenerDepositos - Respuesta de API:', result);
+    console.log('obtenerDepositos - Results extraídos:', result.results);
+    return result.results || [];
+  } catch (error) {
+    console.error('obtenerDepositos - Error:', error);
+    throw error;
+  }
 }
 
 export async function crearDeposito(data: DepositoCreate, token: string): Promise<Deposito> {
-  return apiFetch<Deposito>('/api/empleados/depositos/', {
+  return apiFetch<Deposito>('/api/inventario/depositos/', {
     method: 'POST',
     body: data,
     token
@@ -226,7 +235,7 @@ export async function crearDeposito(data: DepositoCreate, token: string): Promis
 }
 
 export async function actualizarDeposito(id: number, data: Partial<DepositoCreate>, token: string): Promise<Deposito> {
-  return apiFetch<Deposito>(`/api/empleados/depositos/${id}/`, {
+  return apiFetch<Deposito>(`/api/inventario/depositos/${id}/`, {
     method: 'PUT',
     body: data,
     token
@@ -234,21 +243,21 @@ export async function actualizarDeposito(id: number, data: Partial<DepositoCreat
 }
 
 export async function eliminarDeposito(id: number, token: string): Promise<void> {
-  return apiFetch<void>(`/api/empleados/depositos/${id}/`, {
+  return apiFetch<void>(`/api/inventario/depositos/${id}/`, {
     method: 'DELETE',
     token
   });
 }
 
 export async function obtenerDeposito(id: number, token: string): Promise<Deposito> {
-  return apiFetch<Deposito>(`/api/empleados/depositos/${id}/`, {
+  return apiFetch<Deposito>(`/api/inventario/depositos/${id}/`, {
     method: 'GET',
     token
   });
 }
 
-export async function obtenerDepositosDisponibles(token: string): Promise<{ depositos: Deposito[] }> {
-  return apiFetch<{ depositos: Deposito[] }>('/api/empleados/depositos/disponibles/', {
+export async function obtenerDepositosDisponibles(token: string): Promise<{ success: boolean; data: Deposito[] }> {
+  return apiFetch<{ success: boolean; data: Deposito[] }>('/api/inventario/depositos/disponibles/', {
     method: 'GET',
     token
   });
@@ -268,10 +277,12 @@ export async function obtenerEmpleados(token: string, filtros?: {
   const queryString = params.toString();
   const path = queryString ? `/api/empleados/?${queryString}` : '/api/empleados/';
   
-  return apiFetch<Empleado[]>(path, {
+  const result = await apiFetch<{count: number, results: Empleado[]}>(path, {
     method: 'GET',
     token
   });
+  
+  return result.results || [];
 }
 
 export async function obtenerEmpleado(id: number, token: string): Promise<Empleado> {
@@ -305,7 +316,7 @@ export async function eliminarEmpleado(id: number, token: string): Promise<void>
 }
 
 export async function obtenerRolesDisponibles(token: string): Promise<{ roles: Role[] }> {
-  return apiFetch<{ roles: Role[] }>('/api/empleados/roles/', {
+  return apiFetch<{ success: boolean; roles: Role[] }>('/api/empleados/roles/', {
     method: 'GET',
     token
   });

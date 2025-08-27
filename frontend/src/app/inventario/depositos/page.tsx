@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Container from "@/components/layout/Container";
 import Card from "@/components/layout/Card";
 import Button from "@/components/ui/Button";
@@ -15,6 +16,8 @@ import {
 export default function DepositosPage() {
   const { token } = useAuth();
   const { showToast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   
   const [depositos, setDepositos] = useState<Deposito[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,9 +30,11 @@ export default function DepositosPage() {
     const cargarDepositos = async () => {
       try {
         setLoading(true);
+        console.log('Cargando depósitos...');
         const depositosData = await obtenerDepositos(token);
-        // Asegurar que depositosData es un array
-        setDepositos(Array.isArray(depositosData) ? depositosData : []);
+        console.log('Datos recibidos:', depositosData);
+        console.log('Depósitos procesados:', depositosData);
+        setDepositos(depositosData);
       } catch (error) {
         console.error('Error al cargar depósitos:', error);
         showToast(`Error al cargar depósitos: ${error}`, 'error');
@@ -41,7 +46,12 @@ export default function DepositosPage() {
     };
 
     cargarDepositos();
-  }, [token, showToast]);
+    
+    // Limpiar el parámetro created si existe
+    if (searchParams.get('created') === 'true') {
+      router.replace('/inventario/depositos');
+    }
+  }, [token, showToast, searchParams, router]);
 
   const handleEliminarDeposito = async (id: number, nombre: string) => {
     if (!token) return;

@@ -58,7 +58,7 @@ export default function EditarEmpleadoPage() {
         setPuesto(empleadoData.puesto);
         setDeposito(empleadoData.deposito);
         
-        setDepositos(depositosData.depositos);
+        setDepositos(depositosData.data);
         setRoles(rolesData.roles);
       } catch (error) {
         showToast(`Error al cargar datos: ${error}`, 'error');

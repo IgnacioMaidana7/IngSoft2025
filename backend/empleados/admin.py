@@ -1,23 +1,5 @@
 from django.contrib import admin
-from .models import Empleado, Deposito
-
-
-@admin.register(Deposito)
-class DepositoAdmin(admin.ModelAdmin):
-    list_display = ['nombre', 'direccion', 'supermercado', 'activo', 'fecha_creacion']
-    list_filter = ['activo', 'supermercado', 'fecha_creacion']
-    search_fields = ['nombre', 'direccion', 'supermercado__nombre_supermercado']
-    readonly_fields = ['fecha_creacion', 'fecha_modificacion']
-    
-    fieldsets = (
-        ('Información del Depósito', {
-            'fields': ('nombre', 'direccion', 'supermercado', 'activo')
-        }),
-        ('Fechas', {
-            'fields': ('fecha_creacion', 'fecha_modificacion'),
-            'classes': ('collapse',)
-        }),
-    )
+from .models import Empleado
 
 
 @admin.register(Empleado)

@@ -44,7 +44,7 @@ export default function NuevoEmpleadoPage() {
           obtenerRolesDisponibles(token)
         ]);
         
-        setDepositos(depositosData.depositos);
+        setDepositos(depositosData.data);
         setRoles(rolesData.roles);
       } catch (error) {
         showToast(`Error al cargar datos: ${error}`, 'error');

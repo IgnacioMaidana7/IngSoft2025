@@ -48,7 +48,7 @@ export default function NuevoDepositoPage() {
 
       await crearDeposito(nuevoDeposito, token);
       showToast('Depósito creado exitosamente', 'success');
-      router.push('/inventario/depositos');
+      router.push('/inventario/depositos?created=true');
     } catch (error) {
       showToast(`Error al crear depósito: ${error}`, 'error');
     } finally {
