@@ -160,6 +160,7 @@ export default function NuevoEmpleadoPage() {
                 value={nombre} 
                 onChange={(e) => setNombre(e.target.value)}
                 placeholder="Ingrese el nombre"
+                autoComplete="given-name"
                 disabled={loading}
               />
               <Input 
@@ -167,6 +168,7 @@ export default function NuevoEmpleadoPage() {
                 value={apellido} 
                 onChange={(e) => setApellido(e.target.value)}
                 placeholder="Ingrese el apellido"
+                autoComplete="family-name"
                 disabled={loading}
               />
             </div>
@@ -177,6 +179,7 @@ export default function NuevoEmpleadoPage() {
               value={email} 
               onChange={(e) => setEmail(e.target.value)}
               placeholder="ejemplo@email.com"
+              autoComplete="email"
               disabled={loading}
             />
             
@@ -186,6 +189,7 @@ export default function NuevoEmpleadoPage() {
               onChange={(e) => setDni(e.target.value.replace(/\D/g, ''))}
               placeholder="12345678"
               maxLength={8}
+              autoComplete="off"
               disabled={loading}
             />
           </div>

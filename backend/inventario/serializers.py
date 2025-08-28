@@ -48,4 +48,4 @@ class DepositoListSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Deposito
-        fields = ['id', 'nombre', 'direccion', 'descripcion', 'activo', 'fecha_creacion']
+        fields = ['id', 'nombre', 'direccion', 'descripcion', 'activo', 'fecha_creacion', 'fecha_modificacion']

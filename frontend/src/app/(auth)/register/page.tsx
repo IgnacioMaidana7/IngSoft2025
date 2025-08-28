@@ -252,6 +252,7 @@ export default function RegisterPage() {
                         onChange={(e) => setEmail(e.target.value)} 
                         type="email" 
                         placeholder="tu@correo.com"
+                        autoComplete="username"
                     />
                     <Input 
                         label="Contraseña" 
@@ -259,6 +260,7 @@ export default function RegisterPage() {
                         onChange={(e) => setPassword(e.target.value)} 
                         type="password" 
                         placeholder="Mínimo 8 caracteres"
+                        autoComplete="new-password"
                         helper="Debe incluir al menos un número y un carácter especial"
                     />
                     <Input 
@@ -267,6 +269,7 @@ export default function RegisterPage() {
                         onChange={(e) => setConfirmPassword(e.target.value)} 
                         type="password" 
                         placeholder="Confirma tu contraseña"
+                        autoComplete="new-password"
                         error={confirmPassword && password !== confirmPassword ? "Las contraseñas no coinciden" : undefined}
                     />
                     

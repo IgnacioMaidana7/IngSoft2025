@@ -1,0 +1,16 @@
+{
+  "name": "Sistema de Gestión - AppProductos",
+  "short_name": "AppProductos",
+  "description": "Sistema integral para gestión de inventario, productos, ventas y empleados",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ]
+}

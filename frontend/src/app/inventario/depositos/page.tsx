@@ -169,9 +169,11 @@ export default function DepositosPage() {
                         <div><strong>Descripción:</strong> {deposito.descripcion}</div>
                       )}
                       <div><strong>Creado:</strong> {new Date(deposito.fecha_creacion).toLocaleDateString()}</div>
-                      {deposito.fecha_modificacion !== deposito.fecha_creacion && (
-                        <div><strong>Modificado:</strong> {new Date(deposito.fecha_modificacion).toLocaleDateString()}</div>
-                      )}
+                      <div><strong>Modificado:</strong> {
+                        deposito.fecha_modificacion !== deposito.fecha_creacion 
+                          ? new Date(deposito.fecha_modificacion).toLocaleDateString()
+                          : "Todavía no se ha modificado"
+                      }</div>
                     </div>
                   </div>
                   <div className="flex gap-2">
