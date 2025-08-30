@@ -14,8 +14,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
-    if (stored) setToken(stored);
+    // Verificar primero access_token (JWT), luego auth_token (token de sesión)
+    const access = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+    const auth = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+    
+    if (access) {
+      setToken(access);
+    } else if (auth && auth !== "fake-token") {
+      setToken(auth);
+    }
   }, []);
 
   useEffect(() => {
@@ -25,13 +32,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [token]);
 
   const login = useCallback(async (_email?: string, _password?: string) => {
-  // Referenciar argumentos para evitar advertencias de no-usados en lint/ts
-  void _email;
-  void _password;
-    // Si ya guardaste tokens reales en localStorage desde la pantalla de login,
-    // usa el access_token para marcar la sesión como activa.
+    // Referenciar argumentos para evitar advertencias de no-usados en lint/ts
+    void _email;
+    void _password;
+    
+    // Priorizar access_token (JWT) sobre auth_token
     const access = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
-    setToken(access ?? "fake-token");
+    
+    if (access) {
+      setToken(access);
+    } else {
+      // Solo usar fake-token como último recurso para testing
+      console.warn("No hay token real disponible, usando token de prueba");
+      setToken("fake-token");
+    }
   }, []);
 
   const logout = useCallback(() => {

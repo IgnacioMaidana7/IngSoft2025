@@ -1,175 +1,328 @@
-"use client";
-import React, { useState } from "react";
-import ProductListItem, { ProductItem } from "@/components/feature/ProductListItem";
-import Button from "@/components/ui/Button";
-import Input from "@/components/ui/Input";
-import Container from "@/components/layout/Container";
-import Card from "@/components/layout/Card";
+'use client';
 
-const mock: ProductItem[] = [
-  { id: "1", name: "Manzana Roja", category: "Frutas", price: "$1200", imageUri: "https://picsum.photos/seed/a/100" },
-  { id: "2", name: "Leche Entera", category: "Lácteos", price: "$1800", imageUri: "https://picsum.photos/seed/b/100" },
-  { id: "3", name: "Pan Integral", category: "Panadería", price: "$800" },
-  { id: "4", name: "Agua Mineral", category: "Bebidas", price: "$500", imageUri: "https://picsum.photos/seed/c/100" },
-  { id: "5", name: "Queso Cremoso", category: "Lácteos", price: "$2400", imageUri: "https://picsum.photos/seed/d/100" },
-];
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
+import { 
+  obtenerProductos, 
+  obtenerCategoriasDisponibles, 
+  obtenerDepositos, 
+  eliminarProducto,
+  type ProductoList,
+  type CategoriaSimple,
+  type Deposito
+} from '@/lib/api';
 
 export default function ProductosPage() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all");
-
-  const categories = ["all", ...Array.from(new Set(mock.map(p => p.category)))];
+  const { isLoggedIn, token } = useAuth();
+  const router = useRouter();
   
-  const filteredProducts = mock.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.category.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === "all" || product.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const [productos, setProductos] = useState<ProductoList[]>([]);
+  const [categorias, setCategorias] = useState<CategoriaSimple[]>([]);
+  const [depositos, setDepositos] = useState<Deposito[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Filtros y paginación
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategoria, setSelectedCategoria] = useState<number | ''>('');
+  const [selectedDeposito, setSelectedDeposito] = useState<number | ''>('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+
+  const loadData = useCallback(async () => {
+    if (!token) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Cargar datos básicos
+      const [categoriasData, depositosData] = await Promise.all([
+        obtenerCategoriasDisponibles(token),
+        obtenerDepositos(token)
+      ]);
+
+      setCategorias(categoriasData);
+      setDepositos(depositosData);
+
+      // Cargar productos con filtros
+      const filters: {
+        search?: string;
+        categoria?: number;
+        deposito?: number;
+      } = {};
+      if (searchTerm) filters.search = searchTerm;
+      if (selectedCategoria) filters.categoria = selectedCategoria;
+      if (selectedDeposito) filters.deposito = selectedDeposito;
+
+      const productosData = await obtenerProductos(token, currentPage, filters);
+      
+      setProductos(productosData.results);
+      setTotalCount(productosData.count);
+      setTotalPages(Math.ceil(productosData.count / 10)); // Asumiendo 10 items por página
+
+    } catch (err) {
+      console.error('Error loading data:', err);
+      setError('Error al cargar los datos. Por favor, intenta nuevamente.');
+    } finally {
+      setLoading(false);
+    }
+  }, [token, searchTerm, selectedCategoria, selectedDeposito, currentPage]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !token) {
+      router.push('/login');
+      return;
+    }
+    loadData();
+  }, [loadData, token, isLoggedIn, router]);
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('¿Estás seguro de que quieres deshabilitar este producto?')) {
+      return;
+    }
+
+    try {
+      await eliminarProducto(id, token!);
+      await loadData(); // Recargar la lista
+    } catch (err) {
+      console.error('Error deleting product:', err);
+      alert('Error al deshabilitar el producto');
+    }
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCurrentPage(1);
+    loadData();
+  };
+
+  const resetFilters = () => {
+    setSearchTerm('');
+    setSelectedCategoria('');
+    setSelectedDeposito('');
+    setCurrentPage(1);
+  };
+
+  if (!isLoggedIn || !token) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
 
   return (
-    <Container size="xl">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-4 mb-6">
-          <div className="w-12 h-12 bg-gradient-to-br from-primary to-primary/80 rounded-2xl flex items-center justify-center text-white text-2xl shadow-xl shadow-primary/30">
-            🏷️
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-text mb-1">Gestión de Productos</h1>
-            <p className="text-lightText">Administra tu catálogo de productos</p>
-          </div>
-        </div>
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">Gestión de Productos</h1>
+        <button
+          onClick={() => router.push('/productos/nuevo')}
+          className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+        >
+          Nuevo Producto
+        </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <Card variant="gradient" padding="sm" className="text-center">
-          <div className="text-2xl font-bold text-primary mb-1">{mock.length}</div>
-          <div className="text-sm text-lightText">Total Productos</div>
-        </Card>
-        <Card variant="gradient" padding="sm" className="text-center">
-          <div className="text-2xl font-bold text-primary mb-1">{categories.length - 1}</div>
-          <div className="text-sm text-lightText">Categorías</div>
-        </Card>
-        <Card variant="gradient" padding="sm" className="text-center">
-          <div className="text-2xl font-bold text-green-600 mb-1">4</div>
-          <div className="text-sm text-lightText">En Stock</div>
-        </Card>
-        <Card variant="gradient" padding="sm" className="text-center">
-          <div className="text-2xl font-bold text-orange-600 mb-1">1</div>
-          <div className="text-sm text-lightText">Stock Bajo</div>
-        </Card>
-      </div>
-
-      {/* Filters and Actions */}
-      <Card variant="elevated" className="mb-8">
-        <div className="flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
-          <div className="flex flex-col sm:flex-row gap-4 flex-1">
-            <div className="flex-1">
-              <Input
-                placeholder="Buscar productos..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                icon={
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                }
-              />
-            </div>
-            <div className="sm:w-48">
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full py-4 px-4 rounded-2xl border-2 border-border bg-white text-text focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-300"
-              >
-                <option value="all">Todas las categorías</option>
-                {categories.slice(1).map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          
-          <div className="flex gap-3">
-            <Button
-              variant="ghost"
-              icon={
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              }
-              onClick={() => alert('Exportar datos')}
-            >
-              Exportar
-            </Button>
-            <Button
-              icon={
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-              }
-              onClick={() => location.assign('/productos/nuevo')}
-            >
-              Nuevo Producto
-            </Button>
-          </div>
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
         </div>
-      </Card>
+      )}
 
-      {/* Products List */}
-      <Card>
-        <div className="mb-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-text">
-              Productos ({filteredProducts.length})
-            </h2>
-            {searchTerm && (
-              <div className="text-sm text-lightText">
-                Mostrando resultados para &ldquo;{searchTerm}&rdquo;
-              </div>
-            )}
-          </div>
-        </div>
+      {/* Filtros */}
+      <div className="bg-white shadow-md rounded-lg p-6 mb-6">
+        <h2 className="text-lg font-semibold mb-4">Filtros</h2>
         
-        {filteredProducts.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center mx-auto mb-4">
-              <svg className="w-10 h-10 text-primary/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 009.586 13H7" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-semibold text-text mb-2">No se encontraron productos</h3>
-            <p className="text-lightText mb-6">
-              {searchTerm ? 'Intenta con otros términos de búsqueda' : 'Agrega tu primer producto para comenzar'}
-            </p>
-            <Button
-              onClick={() => location.assign('/productos/nuevo')}
-              icon={
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-              }
+        <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Buscar por nombre
+            </label>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Nombre del producto..."
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Categoría
+            </label>
+            <select
+              value={selectedCategoria}
+              onChange={(e) => setSelectedCategoria(e.target.value ? Number(e.target.value) : '')}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              Agregar Producto
-            </Button>
+              <option value="">Todas las categorías</option>
+              {categorias.map((categoria) => (
+                <option key={categoria.id} value={categoria.id}>
+                  {categoria.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Depósito
+            </label>
+            <select
+              value={selectedDeposito}
+              onChange={(e) => setSelectedDeposito(e.target.value ? Number(e.target.value) : '')}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Todos los depósitos</option>
+              {depositos.map((deposito) => (
+                <option key={deposito.id} value={deposito.id}>
+                  {deposito.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+            >
+              Buscar
+            </button>
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded"
+            >
+              Limpiar
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Lista de productos */}
+      <div className="bg-white shadow-md rounded-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold">
+            Productos ({totalCount} total{totalCount !== 1 ? 'es' : ''})
+          </h2>
+        </div>
+
+        {productos.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-500">No se encontraron productos.</p>
           </div>
         ) : (
-          <div className="space-y-1">
-            {filteredProducts.map((product) => (
-              <ProductListItem 
-                key={product.id} 
-                item={product} 
-                onEdit={() => alert('Editar ' + product.name)} 
-                onDelete={() => alert('Eliminar ' + product.name)} 
-              />
-            ))}
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Nombre
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Categoría
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Precio
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Stock Total
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Estado
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {productos.map((producto) => (
+                  <tr key={producto.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {producto.nombre}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {producto.categoria_nombre}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      ${parseFloat(producto.precio).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {producto.stock_total}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        producto.activo
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {producto.activo ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                      <button
+                        onClick={() => router.push(`/productos/${producto.id}`)}
+                        className="text-indigo-600 hover:text-indigo-900"
+                      >
+                        Ver/Editar
+                      </button>
+                      {producto.activo && (
+                        <button
+                          onClick={() => handleDelete(producto.id)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Deshabilitar
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-      </Card>
-    </Container>
+
+        {/* Paginación */}
+        {totalPages > 1 && (
+          <div className="px-6 py-4 border-t border-gray-200">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-700">
+                Página {currentPage} de {totalPages}
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 border border-gray-300 rounded-md text-sm bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Anterior
+                </button>
+                <button
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 border border-gray-300 rounded-md text-sm bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
-
-

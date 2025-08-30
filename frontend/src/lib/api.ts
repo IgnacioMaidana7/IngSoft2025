@@ -124,6 +124,13 @@ export interface AuthResponse {
   };
 }
 
+export interface PaginatedResponse<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+
 export async function registerSupermercado(data: RegisterSupermercadoData): Promise<AuthResponse> {
   const formData = new FormData();
   
@@ -325,6 +332,250 @@ export async function obtenerRolesDisponibles(token: string): Promise<{ roles: R
 export async function obtenerEstadisticasEmpleados(token: string): Promise<EstadisticasEmpleados> {
   return apiFetch<EstadisticasEmpleados>('/api/empleados/estadisticas/', {
     method: 'GET',
+    token
+  });
+}
+
+// === INTERFACES PARA PRODUCTOS ===
+
+export interface Categoria {
+  id: number;
+  nombre: string;
+  descripcion?: string;
+  activo: boolean;
+  fecha_creacion: string;
+}
+
+export interface CategoriaSimple {
+  id: number;
+  nombre: string;
+}
+
+export interface ProductoStock {
+  id: number;
+  deposito: number;
+  deposito_nombre: string;
+  deposito_direccion: string;
+  cantidad: number;
+  cantidad_minima: number;
+  tiene_stock: boolean;
+  stock_bajo: boolean;
+  fecha_creacion: string;
+  fecha_modificacion: string;
+}
+
+export interface Producto {
+  id: number;
+  nombre: string;
+  categoria: number;
+  categoria_nombre: string;
+  precio: string;
+  descripcion?: string;
+  activo: boolean;
+  stocks: ProductoStock[];
+  stock_total: number;
+  fecha_creacion: string;
+  fecha_modificacion: string;
+}
+
+export interface ProductoList {
+  id: number;
+  nombre: string;
+  categoria_nombre: string;
+  precio: string;
+  activo: boolean;
+  stock_total: number;
+  depositos_count: number;
+  fecha_modificacion: string;
+}
+
+export interface ProductoCreate {
+  nombre: string;
+  categoria: number;
+  precio: string;
+  descripcion?: string;
+  deposito_id?: number;
+  cantidad_inicial?: number;
+  cantidad_minima?: number;
+}
+
+export interface ProductoDeposito {
+  id: number;
+  nombre: string;
+  categoria: string;
+  precio: string;
+  cantidad: number;
+  cantidad_minima: number;
+  tiene_stock: boolean;
+  stock_bajo: boolean;
+  stock_id: number;
+}
+
+export interface ProductosPorDeposito {
+  deposito: {
+    id: number;
+    nombre: string;
+    direccion: string;
+  };
+  productos: ProductoDeposito[];
+}
+
+export interface EstadisticasProductos {
+  total_productos: number;
+  total_categorias: number;
+  productos_sin_stock: number;
+  stock_por_categoria: Array<{
+    categoria: string;
+    stock_total: number;
+    productos_count: number;
+  }>;
+}
+
+// === FUNCIONES PARA CATEGORÍAS ===
+
+export async function obtenerCategorias(token: string, page?: number): Promise<PaginatedResponse<Categoria>> {
+  const url = page ? `/api/productos/categorias/?page=${page}` : '/api/productos/categorias/';
+  const response = await apiFetch<PaginatedResponse<Categoria>>(url, {
+    method: 'GET',
+    token
+  });
+  
+  return {
+    ...response,
+    results: response.results || (response as unknown as Categoria[])
+  };
+}
+
+export async function obtenerCategoriasDisponibles(token: string): Promise<CategoriaSimple[]> {
+  return apiFetch<CategoriaSimple[]>('/api/productos/categorias/disponibles/', {
+    method: 'GET',
+    token
+  });
+}
+
+export async function crearCategoria(data: Omit<Categoria, 'id' | 'fecha_creacion'>, token: string): Promise<Categoria> {
+  return apiFetch<Categoria>('/api/productos/categorias/', {
+    method: 'POST',
+    body: data,
+    token
+  });
+}
+
+export async function actualizarCategoria(id: number, data: Partial<Categoria>, token: string): Promise<Categoria> {
+  return apiFetch<Categoria>(`/api/productos/categorias/${id}/`, {
+    method: 'PUT',
+    body: data,
+    token
+  });
+}
+
+export async function eliminarCategoria(id: number, token: string): Promise<void> {
+  return apiFetch<void>(`/api/productos/categorias/${id}/`, {
+    method: 'DELETE',
+    token
+  });
+}
+
+// === FUNCIONES PARA PRODUCTOS ===
+
+export async function obtenerProductos(
+  token: string, 
+  page?: number, 
+  filters?: {
+    categoria?: number;
+    deposito?: number;
+    activo?: boolean;
+    search?: string;
+  }
+): Promise<PaginatedResponse<ProductoList>> {
+  let url = '/api/productos/';
+  const params = new URLSearchParams();
+  
+  if (page) params.append('page', page.toString());
+  if (filters?.categoria) params.append('categoria', filters.categoria.toString());
+  if (filters?.deposito) params.append('deposito', filters.deposito.toString());
+  if (filters?.activo !== undefined) params.append('activo', filters.activo.toString());
+  if (filters?.search) params.append('search', filters.search);
+  
+  if (params.toString()) {
+    url += `?${params.toString()}`;
+  }
+  
+  const response = await apiFetch<PaginatedResponse<ProductoList>>(url, {
+    method: 'GET',
+    token
+  });
+  
+  return {
+    ...response,
+    results: response.results || (response as unknown as ProductoList[])
+  };
+}
+
+export async function obtenerProducto(id: number, token: string): Promise<Producto> {
+  return apiFetch<Producto>(`/api/productos/${id}/`, {
+    method: 'GET',
+    token
+  });
+}
+
+export async function crearProducto(data: ProductoCreate, token: string): Promise<Producto> {
+  return apiFetch<Producto>('/api/productos/', {
+    method: 'POST',
+    body: data,
+    token
+  });
+}
+
+export async function actualizarProducto(id: number, data: Partial<ProductoCreate>, token: string): Promise<Producto> {
+  return apiFetch<Producto>(`/api/productos/${id}/`, {
+    method: 'PUT',
+    body: data,
+    token
+  });
+}
+
+export async function eliminarProducto(id: number, token: string): Promise<void> {
+  return apiFetch<void>(`/api/productos/${id}/`, {
+    method: 'DELETE',
+    token
+  });
+}
+
+export async function obtenerProductosPorDeposito(depositoId: number, token: string): Promise<ProductosPorDeposito> {
+  return apiFetch<ProductosPorDeposito>(`/api/productos/deposito/${depositoId}/`, {
+    method: 'GET',
+    token
+  });
+}
+
+export async function obtenerEstadisticasProductos(token: string): Promise<EstadisticasProductos> {
+  return apiFetch<EstadisticasProductos>('/api/productos/estadisticas/', {
+    method: 'GET',
+    token
+  });
+}
+
+export async function gestionarStockProducto(
+  productoId: number, 
+  data: { deposito: number; cantidad: number; cantidad_minima?: number }, 
+  token: string
+): Promise<ProductoStock> {
+  return apiFetch<ProductoStock>(`/api/productos/${productoId}/stock/`, {
+    method: 'POST',
+    body: data,
+    token
+  });
+}
+
+export async function actualizarStockProducto(
+  stockId: number, 
+  data: { cantidad?: number; cantidad_minima?: number }, 
+  token: string
+): Promise<ProductoStock> {
+  return apiFetch<ProductoStock>(`/api/productos/stock/${stockId}/`, {
+    method: 'PUT',
+    body: data,
     token
   });
 }
