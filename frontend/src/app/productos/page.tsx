@@ -13,6 +13,23 @@ import {
   type Deposito
 } from '@/lib/api';
 
+// Hook personalizado para debounce
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
 export default function ProductosPage() {
   const { isLoggedIn, token } = useAuth();
   const router = useRouter();
@@ -30,6 +47,9 @@ export default function ProductosPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+
+  // Debounce del término de búsqueda para evitar muchas llamadas a la API
+  const debouncedSearchTerm = useDebounce(searchTerm, 500); // 500ms de retraso
 
   const loadData = useCallback(async () => {
     if (!token) return;
@@ -53,7 +73,7 @@ export default function ProductosPage() {
         categoria?: number;
         deposito?: number;
       } = {};
-      if (searchTerm) filters.search = searchTerm;
+      if (debouncedSearchTerm) filters.search = debouncedSearchTerm;
       if (selectedCategoria) filters.categoria = selectedCategoria;
       if (selectedDeposito) filters.deposito = selectedDeposito;
 
@@ -69,7 +89,7 @@ export default function ProductosPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, searchTerm, selectedCategoria, selectedDeposito, currentPage]);
+  }, [token, debouncedSearchTerm, selectedCategoria, selectedDeposito, currentPage]);
 
   useEffect(() => {
     if (!isLoggedIn || !token) {
@@ -93,18 +113,17 @@ export default function ProductosPage() {
     }
   };
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setCurrentPage(1);
-    loadData();
-  };
-
   const resetFilters = () => {
     setSearchTerm('');
     setSelectedCategoria('');
     setSelectedDeposito('');
     setCurrentPage(1);
   };
+
+  // Resetear página cuando cambian los filtros
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearchTerm, selectedCategoria, selectedDeposito]);
 
   if (!isLoggedIn || !token) {
     return (
@@ -144,7 +163,7 @@ export default function ProductosPage() {
       <div className="bg-white shadow-md rounded-lg p-6 mb-6">
         <h2 className="text-lg font-semibold mb-4">Filtros</h2>
         
-        <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Buscar por nombre
@@ -196,20 +215,14 @@ export default function ProductosPage() {
 
           <div className="flex gap-2">
             <button
-              type="submit"
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-            >
-              Buscar
-            </button>
-            <button
               type="button"
               onClick={resetFilters}
               className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded"
             >
-              Limpiar
+              Limpiar Filtros
             </button>
           </div>
-        </form>
+        </div>
       </div>
 
       {/* Lista de productos */}
