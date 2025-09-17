@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'inventario',
     'ventas',
     'ofertas',
+    'notificaciones',
 ]
 
 MIDDLEWARE = [
@@ -113,6 +114,13 @@ DATABASES = {
 # Custom User Model
 AUTH_USER_MODEL = 'authentication.User'
 
+# Authentication backends
+AUTHENTICATION_BACKENDS = [
+    'authentication.backends.EmpleadoAuthBackend',
+    'authentication.backends.SupermercadoAuthBackend',
+    'django.contrib.auth.backends.ModelBackend',  # Backend por defecto
+]
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -163,7 +171,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Django REST Framework Configuration
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'authentication.jwt.MultiUserJWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',

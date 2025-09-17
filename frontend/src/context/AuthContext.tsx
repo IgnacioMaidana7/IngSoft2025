@@ -54,6 +54,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
       localStorage.removeItem("auth_token");
+      localStorage.removeItem("user_type");
+      localStorage.removeItem("user_role");
+      localStorage.removeItem("empleado_info");
     }
     setToken(null);
   }, []);

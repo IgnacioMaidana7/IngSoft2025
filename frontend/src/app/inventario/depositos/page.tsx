@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Container from "@/components/layout/Container";
 import Card from "@/components/layout/Card";
@@ -13,7 +13,24 @@ import {
   Deposito 
 } from "@/lib/api";
 
+// Wrapper component to satisfy Next.js requirement: useSearchParams must be inside a Suspense boundary
 export default function DepositosPage() {
+  return (
+    <Suspense fallback={
+      <Container>
+        <Card>
+          <div className="text-center py-8">
+            <div className="text-lg">Cargando depósitos...</div>
+          </div>
+        </Card>
+      </Container>
+    }>
+      <DepositosPageContent />
+    </Suspense>
+  );
+}
+
+function DepositosPageContent() {
   const { token } = useAuth();
   const { showToast } = useToast();
   const router = useRouter();
@@ -95,7 +112,7 @@ export default function DepositosPage() {
             <p className="text-lightText">Administra las ubicaciones de almacenamiento</p>
           </div>
           <Button 
-            onClick={() => window.location.href = '/inventario/depositos/nuevo'}
+            onClick={() => router.push('/inventario/depositos/nuevo')}
             className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors"
           >
             + Nuevo Depósito
@@ -142,7 +159,7 @@ export default function DepositosPage() {
               }
             </div>
             {depositos.length === 0 && (
-              <Button onClick={() => window.location.href = '/inventario/depositos/nuevo'}>
+              <Button onClick={() => router.push('/inventario/depositos/nuevo')}>
                 Crear el primer depósito
               </Button>
             )}
@@ -186,7 +203,7 @@ export default function DepositosPage() {
                     </Button>
                     <Button 
                       variant="ghost"
-                      onClick={() => window.location.href = `/inventario/depositos/${deposito.id}`}
+                      onClick={() => router.push(`/inventario/depositos/${deposito.id}`)}
                       className="text-primary hover:text-primary/80 px-3 py-1 border border-primary rounded hover:bg-primary/10 transition-colors"
                     >
                       Editar

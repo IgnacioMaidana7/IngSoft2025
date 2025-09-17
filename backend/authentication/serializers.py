@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from .models import User
+from django.contrib.auth import authenticate
+from .models import User, EmpleadoUser
 import re
 
 
@@ -151,3 +152,96 @@ class UserSerializer(serializers.ModelSerializer):
             'fecha_registro', 'is_active'
         ]
         read_only_fields = ['id', 'fecha_registro']
+
+
+class EmpleadoLoginSerializer(serializers.Serializer):
+    """Serializer para login de empleados usando email y DNI"""
+    
+    email = serializers.EmailField()
+    dni = serializers.CharField(max_length=8)
+    
+    def validate(self, attrs):
+        email = attrs.get('email')
+        dni = attrs.get('dni')
+        
+        if email and dni:
+            # Intentar autenticar usando el backend personalizado
+            user = authenticate(
+                request=self.context.get('request'),
+                username=email,
+                password=dni
+            )
+            
+            if not user:
+                raise serializers.ValidationError(
+                    'No es posible iniciar sesión con las credenciales proporcionadas.'
+                )
+            
+            if not user.is_active:
+                raise serializers.ValidationError(
+                    'La cuenta de usuario está desactivada.'
+                )
+            
+            attrs['user'] = user
+            return attrs
+        
+        raise serializers.ValidationError(
+            'Debe incluir "email" y "dni".'
+        )
+
+
+class EmpleadoUserSerializer(serializers.ModelSerializer):
+    """Serializer para mostrar información del usuario empleado"""
+    
+    nombre_completo = serializers.CharField(source='get_nombre_completo', read_only=True)
+    supermercado_nombre = serializers.CharField(source='supermercado.nombre_supermercado', read_only=True)
+    
+    class Meta:
+        model = EmpleadoUser
+        fields = [
+            'id', 'email', 'nombre', 'apellido', 'nombre_completo', 
+            'dni', 'puesto', 'supermercado_nombre', 'fecha_registro', 'is_active'
+        ]
+        read_only_fields = ['id', 'fecha_registro']
+
+
+class SupermercadoLoginSerializer(serializers.Serializer):
+    """Serializer para login de administradores de supermercado"""
+    
+    email = serializers.EmailField()
+    password = serializers.CharField(style={'input_type': 'password'})
+    
+    def validate(self, attrs):
+        email = attrs.get('email')
+        password = attrs.get('password')
+        
+        if email and password:
+            # Intentar autenticar usando el backend personalizado
+            user = authenticate(
+                request=self.context.get('request'),
+                username=email,
+                password=password
+            )
+            
+            if not user:
+                raise serializers.ValidationError(
+                    'No es posible iniciar sesión con las credenciales proporcionadas.'
+                )
+            
+            if not user.is_active:
+                raise serializers.ValidationError(
+                    'La cuenta de usuario está desactivada.'
+                )
+            
+            # Verificar que sea un administrador de supermercado (User, no EmpleadoUser)
+            if isinstance(user, EmpleadoUser):
+                raise serializers.ValidationError(
+                    'Use el login de empleados para acceder con esta cuenta.'
+                )
+            
+            attrs['user'] = user
+            return attrs
+        
+        raise serializers.ValidationError(
+            'Debe incluir "email" y "password".'
+        )

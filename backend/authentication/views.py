@@ -1,11 +1,19 @@
 from rest_framework import status, generics, serializers
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
+from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
-from .models import User
-from .serializers import UserRegistrationSerializer, UserSerializer
+from .models import User, EmpleadoUser
+from .serializers import (
+    UserRegistrationSerializer, 
+    UserSerializer, 
+    EmpleadoLoginSerializer,
+    EmpleadoUserSerializer,
+    SupermercadoLoginSerializer
+)
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -114,4 +122,82 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = UserSerializer
     
     def get_object(self):
+        return self.request.user
+
+
+class EmpleadoLoginView(APIView):
+    """Vista para login de empleados usando email y DNI"""
+    
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        serializer = EmpleadoLoginSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        
+        if serializer.is_valid():
+            user = serializer.validated_data['user']
+            
+            # Generar tokens JWT
+            refresh = RefreshToken.for_user(user)
+            # Inyectar claim para distinguir tipo de usuario al autenticar el JWT
+            refresh["user_type"] = "empleado"
+            
+            return Response({
+                'message': 'Login exitoso',
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+                'user': EmpleadoUserSerializer(user).data,
+                'user_type': 'empleado'
+            }, status=status.HTTP_200_OK)
+        
+        return Response({
+            'message': 'Credenciales inválidas',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SupermercadoLoginView(APIView):
+    """Vista para login de administradores de supermercado"""
+    
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        serializer = SupermercadoLoginSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        
+        if serializer.is_valid():
+            user = serializer.validated_data['user']
+            
+            # Generar tokens JWT
+            refresh = RefreshToken.for_user(user)
+            # Inyectar claim para distinguir tipo de usuario al autenticar el JWT
+            refresh["user_type"] = "supermercado"
+            
+            return Response({
+                'message': 'Login exitoso',
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+                'user': UserSerializer(user).data,
+                'user_type': 'supermercado'
+            }, status=status.HTTP_200_OK)
+        
+        return Response({
+            'message': 'Credenciales inválidas',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class EmpleadoProfileView(generics.RetrieveAPIView):
+    """Vista para obtener perfil del empleado"""
+    
+    serializer_class = EmpleadoUserSerializer
+    
+    def get_object(self):
+        # Verificar que el usuario autenticado sea un empleado
+        if not isinstance(self.request.user, EmpleadoUser):
+            raise serializers.ValidationError("Solo los empleados pueden acceder a este endpoint")
         return self.request.user

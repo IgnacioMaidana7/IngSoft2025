@@ -14,6 +14,7 @@ import {
   obtenerDepositos,
   gestionarStockProducto,
   actualizarStockProducto,
+  obtenerMiDeposito,
   CategoriaSimple,
   Deposito,
   Producto
@@ -31,6 +32,10 @@ export default function ProductoDetailPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Estados para reponedor
+  const [isReponedor, setIsReponedor] = useState(false);
+  const [miDeposito, setMiDeposito] = useState<Deposito | null>(null);
   
   // Estados para edición
   const [isEditing, setIsEditing] = useState(false);
@@ -54,11 +59,28 @@ export default function ProductoDetailPage() {
     
     try {
       setLoading(true);
+      
+      // Detectar si es reponedor
+      const userType = localStorage.getItem('user_type');
+      const esReponedor = userType === 'empleado';
+      setIsReponedor(esReponedor);
+      
+      // Cargar datos base
       const [productoData, categoriasData, depositosData] = await Promise.all([
         obtenerProducto(productId, token),
         obtenerCategoriasDisponibles(token),
         obtenerDepositos(token)
       ]);
+      
+      // Si es reponedor, obtener su depósito asignado
+      if (esReponedor) {
+        try {
+          const depositoAsignado = await obtenerMiDeposito(token);
+          setMiDeposito(depositoAsignado);
+        } catch (err) {
+          console.error('Error obteniendo depósito del reponedor:', err);
+        }
+      }
       
       setProducto(productoData);
       setEditedData({
@@ -106,14 +128,20 @@ export default function ProductoDetailPage() {
   const handleAddStock = async () => {
     if (!token || !producto) return;
     
-    if (!newStock.deposito) {
+    // Para reponedores, usar automáticamente su depósito asignado
+    const depositoId = isReponedor && miDeposito ? miDeposito.id : newStock.deposito;
+    
+    if (!depositoId) {
       alert('Debes seleccionar un depósito');
       return;
     }
 
     try {
       setSaving(true);
-      await gestionarStockProducto(producto.id, newStock, token);
+      await gestionarStockProducto(producto.id, {
+        ...newStock,
+        deposito: depositoId
+      }, token);
       await cargarDatos(); // Recargar datos
       setShowAddStock(false);
       setNewStock({ deposito: 0, cantidad: 0, cantidad_minima: 0 });
@@ -136,6 +164,19 @@ export default function ProductoDetailPage() {
     } catch (err: unknown) {
       console.error('Error actualizando stock:', err);
       alert((err as Error).message || 'Error al actualizar stock');
+    }
+  };
+
+  const handleUpdateStockMinimo = async (stockId: number, cantidadMinima: number) => {
+    if (!token) return;
+    
+    try {
+      await actualizarStockProducto(stockId, { cantidad_minima: cantidadMinima }, token);
+      await cargarDatos(); // Recargar datos
+      alert('Stock mínimo actualizado exitosamente');
+    } catch (err: unknown) {
+      console.error('Error actualizando stock mínimo:', err);
+      alert((err as Error).message || 'Error al actualizar stock mínimo');
     }
   };
 
@@ -298,25 +339,38 @@ export default function ProductoDetailPage() {
           <Card>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold text-text">Stock por Depósito</h2>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setShowAddStock(true)}
-              >
-                Agregar Stock
-              </Button>
+              {!isReponedor && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowAddStock(true)}
+                >
+                  Agregar Stock
+                </Button>
+              )}
             </div>
 
-            {producto.stocks.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-lightText mb-4">No hay stock registrado en ningún depósito</p>
-                <Button onClick={() => setShowAddStock(true)}>
-                  Agregar Primer Stock
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {producto.stocks.map((stock) => (
+            {(() => {
+              // Filtrar stocks según el tipo de usuario
+              const stocksFiltrados = isReponedor && miDeposito 
+                ? producto.stocks.filter(stock => stock.deposito === miDeposito.id)
+                : producto.stocks;
+              
+              return stocksFiltrados.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-lightText mb-4">
+                    {isReponedor && miDeposito 
+                      ? `No hay stock registrado en tu depósito (${miDeposito.nombre})`
+                      : "No hay stock registrado en ningún depósito"
+                    }
+                  </p>
+                  <Button onClick={() => setShowAddStock(true)}>
+                    {isReponedor ? "Agregar Stock a Mi Depósito" : "Agregar Primer Stock"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {stocksFiltrados.map((stock) => (
                   <div key={stock.id} className="border border-gray-200 rounded-lg p-4">
                     <div className="flex justify-between items-start mb-2">
                       <div>
@@ -349,47 +403,95 @@ export default function ProductoDetailPage() {
                           min="0"
                           defaultValue={stock.cantidad}
                           className="w-20"
-                          onBlur={(e) => {
+                          id={`stock-${stock.id}`}
+                          onBlur={!isReponedor ? ((e) => {
                             const newValue = Number(e.target.value);
                             if (newValue !== stock.cantidad) {
                               handleUpdateStock(stock.id, newValue);
                             }
-                          }}
+                          }) : undefined}
                         />
+                        {isReponedor && (
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              const input = document.getElementById(`stock-${stock.id}`) as HTMLInputElement;
+                              const newValue = Number(input.value);
+                              if (newValue !== stock.cantidad) {
+                                handleUpdateStock(stock.id, newValue);
+                              }
+                            }}
+                          >
+                            Guardar
+                          </Button>
+                        )}
                       </div>
                     </div>
                     
-                    <p className="text-xs text-lightText mt-2">
-                      Mínimo: {stock.cantidad_minima} | Actualizado: {new Date(stock.fecha_modificacion).toLocaleDateString()}
-                    </p>
+                    {!isReponedor ? (
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-xs text-lightText">Mínimo:</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          defaultValue={stock.cantidad_minima}
+                          className="w-16 text-xs"
+                          id={`min-stock-${stock.id}`}
+                          onBlur={(e) => {
+                            const newValue = Number(e.target.value);
+                            if (newValue !== stock.cantidad_minima) {
+                              handleUpdateStockMinimo(stock.id, newValue);
+                            }
+                          }}
+                        />
+                        <span className="text-xs text-lightText">| Actualizado: {new Date(stock.fecha_modificacion).toLocaleDateString()}</span>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-lightText mt-2">
+                        Mínimo: {stock.cantidad_minima} | Actualizado: {new Date(stock.fecha_modificacion).toLocaleDateString()}
+                      </p>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              );
+            })()}
           </Card>
 
           {/* Modal para agregar stock */}
           {showAddStock && (
             <Card>
-              <h3 className="text-lg font-semibold text-text mb-4">Agregar Stock</h3>
+              <h3 className="text-lg font-semibold text-text mb-4">
+                {isReponedor ? "Agregar Stock a Mi Depósito" : "Agregar Stock"}
+              </h3>
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-text mb-2">Depósito</label>
-                  <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                    value={newStock.deposito}
-                    onChange={(e) => setNewStock(prev => ({ ...prev, deposito: Number(e.target.value) }))}
-                  >
-                    <option value={0}>Seleccionar depósito</option>
-                    {depositos
-                      .filter(deposito => !producto.stocks.some(stock => stock.deposito === deposito.id))
-                      .map((deposito) => (
-                        <option key={deposito.id} value={deposito.id}>
-                          {deposito.nombre} - {deposito.direccion}
-                        </option>
-                      ))}
-                  </select>
-                </div>
+                {isReponedor && miDeposito ? (
+                  <div>
+                    <label className="block text-sm font-medium text-text mb-2">Depósito</label>
+                    <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
+                      <p className="text-text">{miDeposito.nombre} - {miDeposito.direccion}</p>
+                      <p className="text-xs text-lightText">Tu depósito asignado</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-sm font-medium text-text mb-2">Depósito</label>
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                      value={newStock.deposito}
+                      onChange={(e) => setNewStock(prev => ({ ...prev, deposito: Number(e.target.value) }))}
+                    >
+                      <option value={0}>Seleccionar depósito</option>
+                      {depositos
+                        .filter(deposito => !producto.stocks.some(stock => stock.deposito === deposito.id))
+                        .map((deposito) => (
+                          <option key={deposito.id} value={deposito.id}>
+                            {deposito.nombre} - {deposito.direccion}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -423,7 +525,7 @@ export default function ProductoDetailPage() {
                     onClick={handleAddStock}
                     disabled={saving}
                   >
-                    {saving ? 'Agregando...' : 'Agregar Stock'}
+                    {saving ? 'Guardando...' : (isReponedor ? 'Guardar Stock' : 'Agregar Stock')}
                   </Button>
                 </div>
               </div>

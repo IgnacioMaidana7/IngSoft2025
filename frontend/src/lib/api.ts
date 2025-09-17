@@ -157,9 +157,49 @@ export async function registerSupermercado(data: RegisterSupermercadoData): Prom
 }
 
 export async function loginSupermercado(data: LoginData): Promise<AuthResponse> {
-  return apiFetch<AuthResponse>('/api/auth/login/', {
+  return apiFetch<AuthResponse>('/api/auth/supermercado/login/', {
     method: 'POST',
     body: { email: data.email, password: data.password }
+  });
+}
+
+// Función de login para empleados
+export interface EmpleadoLoginData {
+  email: string;
+  dni: string;
+}
+
+export interface EmpleadoAuthResponse {
+  message: string;
+  refresh: string;
+  access: string;
+  user: {
+    id: number;
+    email: string;
+    nombre: string;
+    apellido: string;
+    nombre_completo: string;
+    dni: string;
+    puesto: 'CAJERO' | 'REPONEDOR';
+    supermercado_nombre: string;
+    fecha_registro: string;
+    is_active: boolean;
+  };
+  user_type: 'empleado';
+}
+
+export async function loginEmpleado(data: EmpleadoLoginData): Promise<EmpleadoAuthResponse> {
+  return apiFetch<EmpleadoAuthResponse>('/api/auth/empleado/login/', {
+    method: 'POST',
+    body: { email: data.email, dni: data.dni }
+  });
+}
+
+// Obtener perfil del empleado logueado
+export async function obtenerPerfilEmpleado(token: string): Promise<EmpleadoAuthResponse['user']> {
+  return apiFetch<EmpleadoAuthResponse['user']>('/api/auth/empleado/profile/', {
+    method: 'GET',
+    token
   });
 }
 
@@ -265,6 +305,14 @@ export async function obtenerDeposito(id: number, token: string): Promise<Deposi
 
 export async function obtenerDepositosDisponibles(token: string): Promise<{ success: boolean; data: Deposito[] }> {
   return apiFetch<{ success: boolean; data: Deposito[] }>('/api/inventario/depositos/disponibles/', {
+    method: 'GET',
+    token
+  });
+}
+
+// Obtener el depósito asignado al reponedor actual
+export async function obtenerMiDeposito(token: string): Promise<Deposito> {
+  return apiFetch<Deposito>('/api/inventario/mi-deposito/', {
     method: 'GET',
     token
   });
@@ -386,6 +434,7 @@ export interface ProductoList {
   activo: boolean;
   stock_total: number;
   depositos_count: number;
+  stock_nivel: 'sin-stock' | 'bajo' | 'normal';
   fecha_modificacion: string;
 }
 
@@ -394,6 +443,7 @@ export interface ProductoCreate {
   categoria: number;
   precio: string;
   descripcion?: string;
+  activo?: boolean;
   deposito_id?: number;
   cantidad_inicial?: number;
   cantidad_minima?: number;
@@ -486,6 +536,7 @@ export async function obtenerProductos(
     deposito?: number;
     activo?: boolean;
     search?: string;
+    stock?: string; // formato: 'sin-stock', 'bajo', 'normal'
   }
 ): Promise<PaginatedResponse<ProductoList>> {
   let url = '/api/productos/';
@@ -496,6 +547,7 @@ export async function obtenerProductos(
   if (filters?.deposito) params.append('deposito', filters.deposito.toString());
   if (filters?.activo !== undefined) params.append('activo', filters.activo.toString());
   if (filters?.search) params.append('search', filters.search);
+  if (filters?.stock) params.append('stock', filters.stock);
   
   if (params.toString()) {
     url += `?${params.toString()}`;
@@ -529,7 +581,7 @@ export async function crearProducto(data: ProductoCreate, token: string): Promis
 
 export async function actualizarProducto(id: number, data: Partial<ProductoCreate>, token: string): Promise<Producto> {
   return apiFetch<Producto>(`/api/productos/${id}/`, {
-    method: 'PUT',
+    method: 'PATCH',
     body: data,
     token
   });
@@ -576,6 +628,34 @@ export async function actualizarStockProducto(
   return apiFetch<ProductoStock>(`/api/productos/stock/${stockId}/`, {
     method: 'PUT',
     body: data,
+    token
+  });
+}
+
+// === NOTIFICACIONES ===
+export interface Notificacion {
+  id: number;
+  titulo: string;
+  mensaje: string;
+  tipo: 'STOCK_MINIMO' | 'INFO' | 'ALERTA';
+  leida: boolean;
+  creada_en: string;
+  destinatario?: { tipo: 'empleado' | 'admin'; nombre: string; email: string } | null;
+}
+
+export async function obtenerMisNotificaciones(token: string): Promise<Notificacion[]> {
+  const resp = await apiFetch<PaginatedResponse<Notificacion> | Notificacion[]>(`/api/notificaciones/`, {
+    method: 'GET',
+    token
+  });
+  // backend ListAPIView con paginación global -> normalizar
+  if (Array.isArray(resp)) return resp;
+  return resp.results || [];
+}
+
+export async function marcarNotificacionLeida(id: number, token: string): Promise<Notificacion> {
+  return apiFetch<Notificacion>(`/api/notificaciones/${id}/leida/`, {
+    method: 'PUT',
     token
   });
 }

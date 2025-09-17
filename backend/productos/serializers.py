@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Categoria, Producto, ProductoDeposito
 from inventario.models import Deposito
+from authentication.models import EmpleadoUser
 
 class CategoriaSerializer(serializers.ModelSerializer):
     class Meta:
@@ -47,17 +48,31 @@ class ProductoListSerializer(serializers.ModelSerializer):
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
     stock_total = serializers.SerializerMethodField()
     depositos_count = serializers.SerializerMethodField()
+    stock_nivel = serializers.SerializerMethodField()
     
     class Meta:
         model = Producto
         fields = ['id', 'nombre', 'categoria_nombre', 'precio', 'activo',
-                 'stock_total', 'depositos_count', 'fecha_modificacion']
+                 'stock_total', 'depositos_count', 'stock_nivel', 'fecha_modificacion']
     
     def get_stock_total(self, obj):
         return sum(stock.cantidad for stock in obj.stocks.all())
     
     def get_depositos_count(self, obj):
         return obj.stocks.count()
+    
+    def get_stock_nivel(self, obj):
+        """Determina el nivel de stock general del producto"""
+        total_stock = self.get_stock_total(obj)
+        if total_stock == 0:
+            return 'sin-stock'
+        
+        # Verificar si tiene stock bajo en algún depósito
+        for stock in obj.stocks.all():
+            if stock.cantidad > 0 and stock.cantidad < stock.cantidad_minima:
+                return 'bajo'
+        
+        return 'normal'
 
 class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
     """Serializer para crear/actualizar productos con stock inicial"""
@@ -67,16 +82,49 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Producto
-        fields = ['id', 'nombre', 'categoria', 'precio', 'descripcion', 
+        fields = ['id', 'nombre', 'categoria', 'precio', 'descripcion', 'activo',
                  'deposito_id', 'cantidad_inicial', 'cantidad_minima']
+
+    def validate(self, attrs):
+        # Solo validar campos obligatorios al crear (instance is None)
+        # Para actualizaciones (instance exists), permitir actualizaciones parciales
+        if self.instance is None:
+            # Validación solo para creación
+            for field in ['nombre', 'categoria', 'precio']:
+                if field not in attrs:
+                    raise serializers.ValidationError({field: 'Este campo es obligatorio.'})
+        
+        return attrs
+
+    def _get_user_deposito(self):
+        request = self.context.get('request')
+        if request and isinstance(request.user, EmpleadoUser):
+            # Obtener depósito desde el modelo Empleado relacionado por email
+            try:
+                from empleados.models import Empleado
+                emp = Empleado.objects.filter(email=request.user.email, supermercado=request.user.supermercado).first()
+                if emp:
+                    return emp.deposito
+            except Exception:
+                pass
+        return None
     
     def create(self, validated_data):
         deposito_id = validated_data.pop('deposito_id', None)
         cantidad_inicial = validated_data.pop('cantidad_inicial', 0)
         cantidad_minima = validated_data.pop('cantidad_minima', 0)
-        
+        # Si el creador es Reponedor y no manda deposito_id, usar su depósito asignado
+        if not deposito_id:
+            user_dep = self._get_user_deposito()
+            if user_dep:
+                deposito_id = user_dep.id
+
+        # Verificar duplicado por nombre en el mismo depósito
+        if deposito_id and Producto.objects.filter(nombre__iexact=validated_data['nombre'], stocks__deposito_id=deposito_id).exists():
+            raise serializers.ValidationError({'nombre': 'Ya existe un producto con este nombre en su depósito.'})
+
         producto = Producto.objects.create(**validated_data)
-        
+
         # Crear stock inicial si se especifica un depósito
         if deposito_id:
             try:
@@ -102,10 +150,14 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
         
-        # Actualizar stock si se especifica
+        # Actualizar/crear stock si se especifica
         if deposito_id and cantidad_inicial is not None:
             try:
                 deposito = Deposito.objects.get(id=deposito_id)
+                # Verificar duplicado si cambia el nombre: mismo nombre en ese depósito distinto producto
+                nuevo_nombre = getattr(instance, 'nombre', None)
+                if nuevo_nombre and Producto.objects.filter(nombre__iexact=nuevo_nombre, stocks__deposito=deposito).exclude(id=instance.id).exists():
+                    raise serializers.ValidationError({'nombre': 'Ya existe un producto con este nombre en su depósito.'})
                 stock, created = ProductoDeposito.objects.get_or_create(
                     producto=instance,
                     deposito=deposito,

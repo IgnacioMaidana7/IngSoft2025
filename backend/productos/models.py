@@ -1,6 +1,10 @@
 from django.db import models
 from django.contrib.auth.models import User
 from inventario.models import Deposito
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from authentication.models import EmpleadoUser
+from notificaciones.models import Notificacion
 
 class Categoria(models.Model):
     nombre = models.CharField(max_length=100, unique=True)
@@ -54,3 +58,77 @@ class ProductoDeposito(models.Model):
     
     def stock_bajo(self):
         return self.cantidad <= self.cantidad_minima
+
+
+@receiver(post_save, sender=ProductoDeposito)
+def notificar_stock_minimo(sender, instance: ProductoDeposito, created, **kwargs):
+    """Crea notificaciones cuando el stock del depósito alcanza o baja del mínimo."""
+    try:
+        if instance.cantidad <= instance.cantidad_minima:
+            # Notificar al admin dueño del depósito
+            admin = instance.deposito.supermercado
+            titulo = f"Stock mínimo alcanzado: {instance.producto.nombre}"
+            mensaje = (
+                f"El producto '{instance.producto.nombre}' en el depósito '{instance.deposito.nombre}' "
+                f"ha alcanzado el stock mínimo. Actual: {instance.cantidad}, Mínimo: {instance.cantidad_minima}."
+            )
+            
+            # Crear notificación para el admin
+            Notificacion.objects.create(
+                admin=admin,
+                titulo=titulo,
+                mensaje=mensaje,
+                tipo="STOCK_MINIMO",
+            )
+            print(f"Notificación creada para admin: {admin.username}")
+
+            # Notificar a todos los reponedores asignados a ese depósito
+            try:
+                from empleados.models import Empleado
+                # Obtener empleados reponedores del depósito específico
+                empleados_dep = Empleado.objects.filter(
+                    deposito=instance.deposito, 
+                    puesto='REPONEDOR', 
+                    activo=True
+                )
+                
+                for empleado in empleados_dep:
+                    try:
+                        # Buscar el EmpleadoUser correspondiente por email y supermercado
+                        empleado_user = EmpleadoUser.objects.get(
+                            email=empleado.email,
+                            supermercado=admin,
+                            is_active=True
+                        )
+                        Notificacion.objects.create(
+                            empleado=empleado_user,
+                            titulo=titulo,
+                            mensaje=mensaje,
+                            tipo="STOCK_MINIMO",
+                        )
+                        print(f"Notificación creada para empleado: {empleado_user.email}")
+                    except EmpleadoUser.DoesNotExist:
+                        print(f"EmpleadoUser no encontrado para email: {empleado.email}")
+                        continue
+                        
+            except Exception as e:
+                print(f"Error notificando a reponedores: {e}")
+                # Si falla la lógica específica de depósito, notificar a todos los reponedores del supermercado
+                reponedores = EmpleadoUser.objects.filter(
+                    supermercado=admin,
+                    puesto='REPONEDOR',
+                    is_active=True,
+                )
+                for rep in reponedores:
+                    Notificacion.objects.create(
+                        empleado=rep,
+                        titulo=titulo,
+                        mensaje=mensaje,
+                        tipo="STOCK_MINIMO",
+                    )
+                    print(f"Notificación creada para reponedor (fallback): {rep.email}")
+                    
+    except Exception as e:
+        print(f"Error en notificar_stock_minimo: {e}")
+        # Evitar que una notificación falle la transacción principal
+        pass

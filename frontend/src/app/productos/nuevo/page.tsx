@@ -11,6 +11,7 @@ import {
   crearProducto, 
   obtenerCategoriasDisponibles,
   obtenerDepositos,
+  obtenerMiDeposito,
   CategoriaSimple,
   Deposito,
   ProductoCreate
@@ -22,9 +23,11 @@ export default function NuevoProductoPage() {
   
   const [categorias, setCategorias] = useState<CategoriaSimple[]>([]);
   const [depositos, setDepositos] = useState<Deposito[]>([]);
+  const [miDeposito, setMiDeposito] = useState<Deposito | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isReponedor, setIsReponedor] = useState(false);
   
   // Datos del formulario
   const [formData, setFormData] = useState<ProductoCreate>({
@@ -42,13 +45,44 @@ export default function NuevoProductoPage() {
     
     try {
       setLoading(true);
-      const [categoriasData, depositosData] = await Promise.all([
-        obtenerCategoriasDisponibles(token),
-        obtenerDepositos(token)
-      ]);
       
-      setCategorias(categoriasData);
-      setDepositos(depositosData);
+      // Verificar si es reponedor
+      const userType = localStorage.getItem('user_type');
+      const esReponedor = userType === 'empleado';
+      setIsReponedor(esReponedor);
+      
+      if (esReponedor) {
+        // Para reponedores: cargar categorías y su depósito asignado
+        try {
+          const [categoriasData, miDepositoData] = await Promise.all([
+            obtenerCategoriasDisponibles(token),
+            obtenerMiDeposito(token)
+          ]);
+          
+          setCategorias(categoriasData);
+          setMiDeposito(miDepositoData);
+          setDepositos([miDepositoData]); // Solo mostrar su depósito
+          
+          // Preseleccionar su depósito
+          setFormData(prev => ({
+            ...prev,
+            deposito_id: miDepositoData.id
+          }));
+        } catch (depositoError) {
+          console.error('Error obteniendo depósito del reponedor:', depositoError);
+          setError('No tienes un depósito asignado. Contacta al administrador.');
+          return;
+        }
+      } else {
+        // Para administradores: cargar categorías y todos los depósitos
+        const [categoriasData, depositosData] = await Promise.all([
+          obtenerCategoriasDisponibles(token),
+          obtenerDepositos(token)
+        ]);
+        
+        setCategorias(categoriasData);
+        setDepositos(depositosData);
+      }
     } catch (err: unknown) {
       console.error('Error cargando datos:', err);
       setError('Error cargando datos necesarios');
@@ -236,12 +270,15 @@ export default function NuevoProductoPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-text mb-2">
-                  Depósito
+                  Depósito {isReponedor && <span className="text-blue-600">(Asignado)</span>}
                 </label>
                 <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent ${
+                    isReponedor ? 'bg-gray-100 cursor-not-allowed' : ''
+                  }`}
                   value={formData.deposito_id || ""}
                   onChange={(e) => handleInputChange('deposito_id', e.target.value ? Number(e.target.value) : undefined)}
+                  disabled={isReponedor}
                 >
                   <option value="">Seleccionar depósito</option>
                   {depositos.map((deposito) => (
@@ -250,6 +287,11 @@ export default function NuevoProductoPage() {
                     </option>
                   ))}
                 </select>
+                {isReponedor && (
+                  <p className="text-sm text-blue-600 mt-1">
+                    💡 Como reponedor, solo puedes crear productos en tu depósito asignado.
+                  </p>
+                )}
               </div>
 
               <div>

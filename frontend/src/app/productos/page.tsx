@@ -7,7 +7,7 @@ import {
   obtenerProductos, 
   obtenerCategoriasDisponibles, 
   obtenerDepositos, 
-  eliminarProducto,
+  actualizarProducto,
   type ProductoList,
   type CategoriaSimple,
   type Deposito
@@ -44,6 +44,9 @@ export default function ProductosPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategoria, setSelectedCategoria] = useState<number | ''>('');
   const [selectedDeposito, setSelectedDeposito] = useState<number | ''>('');
+  const [activoFilter, setActivoFilter] = useState<boolean | ''>(''); // Cambiado de tab a filtro
+  type StockOp = 'sin-stock' | 'bajo' | 'normal' | '';
+  const [stockFilter, setStockFilter] = useState<StockOp>('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -72,10 +75,20 @@ export default function ProductosPage() {
         search?: string;
         categoria?: number;
         deposito?: number;
+        activo?: boolean;
+        stock?: string;
       } = {};
       if (debouncedSearchTerm) filters.search = debouncedSearchTerm;
       if (selectedCategoria) filters.categoria = selectedCategoria;
       if (selectedDeposito) filters.deposito = selectedDeposito;
+      // Filtro activo/inactivo
+      if (activoFilter !== '') {
+        filters.activo = activoFilter;
+      }
+      // Filtro de stock por nivel
+      if (stockFilter) {
+        filters.stock = stockFilter;
+      }
 
       const productosData = await obtenerProductos(token, currentPage, filters);
       
@@ -89,7 +102,7 @@ export default function ProductosPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, debouncedSearchTerm, selectedCategoria, selectedDeposito, currentPage]);
+  }, [token, debouncedSearchTerm, selectedCategoria, selectedDeposito, activoFilter, stockFilter, currentPage]);
 
   useEffect(() => {
     if (!isLoggedIn || !token) {
@@ -99,17 +112,18 @@ export default function ProductosPage() {
     loadData();
   }, [loadData, token, isLoggedIn, router]);
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('¿Estás seguro de que quieres deshabilitar este producto?')) {
+  const handleToggleActive = async (id: number, currentState: boolean) => {
+    const action = currentState ? 'deshabilitar' : 'habilitar';
+    if (!confirm(`¿Estás seguro de que quieres ${action} este producto?`)) {
       return;
     }
 
     try {
-      await eliminarProducto(id, token!);
+      await actualizarProducto(id, { activo: !currentState }, token!);
       await loadData(); // Recargar la lista
     } catch (err) {
-      console.error('Error deleting product:', err);
-      alert('Error al deshabilitar el producto');
+      console.error(`Error ${action}ing product:`, err);
+      alert(`Error al ${action} el producto`);
     }
   };
 
@@ -117,13 +131,15 @@ export default function ProductosPage() {
     setSearchTerm('');
     setSelectedCategoria('');
     setSelectedDeposito('');
+    setActivoFilter('');
+    setStockFilter('');
     setCurrentPage(1);
   };
 
   // Resetear página cuando cambian los filtros
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearchTerm, selectedCategoria, selectedDeposito]);
+  }, [debouncedSearchTerm, selectedCategoria, selectedDeposito, activoFilter, stockFilter]);
 
   if (!isLoggedIn || !token) {
     return (
@@ -142,16 +158,18 @@ export default function ProductosPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Gestión de Productos</h1>
-        <button
-          onClick={() => router.push('/productos/nuevo')}
-          className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Nuevo Producto
-        </button>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold text-gray-900">Gestión de Productos</h1>
+          <button
+            onClick={() => router.push('/productos/nuevo')}
+            className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+          >
+            Nuevo Producto
+          </button>
+          </div>
+        </div>
 
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
@@ -163,7 +181,7 @@ export default function ProductosPage() {
       <div className="bg-white shadow-md rounded-lg p-6 mb-6">
         <h2 className="text-lg font-semibold mb-4">Filtros</h2>
         
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Buscar por nombre
@@ -210,6 +228,39 @@ export default function ProductosPage() {
                   {deposito.nombre}
                 </option>
               ))}
+            </select>
+          </div>
+
+          {/* Filtro de Estado */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Estado
+            </label>
+            <select
+              value={activoFilter === '' ? '' : activoFilter ? 'activo' : 'inactivo'}
+              onChange={(e) => setActivoFilter(e.target.value === '' ? '' : e.target.value === 'activo')}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Todos los estados</option>
+              <option value="activo">Activos</option>
+              <option value="inactivo">Inactivos</option>
+            </select>
+          </div>
+
+          {/* Filtro de Stock */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nivel de Stock
+            </label>
+            <select
+              value={stockFilter}
+              onChange={(e) => setStockFilter(e.target.value as StockOp)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Todos los niveles</option>
+              <option value="sin-stock">Sin Stock (0 unidades)</option>
+              <option value="bajo">Stock Bajo (&lt; Stock Mínimo)</option>
+              <option value="normal">Stock Normal (&gt;= Stock Mínimo)</option>
             </select>
           </div>
 
@@ -278,13 +329,28 @@ export default function ProductosPage() {
                       {producto.stock_total}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        producto.activo
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {producto.activo ? 'Activo' : 'Inactivo'}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          producto.activo
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {producto.activo ? 'Activo' : 'Inactivo'}
+                        </span>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          producto.stock_nivel === 'sin-stock'
+                            ? 'bg-red-100 text-red-800'
+                            : producto.stock_nivel === 'bajo'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {producto.stock_nivel === 'sin-stock' 
+                            ? 'Sin Stock' 
+                            : producto.stock_nivel === 'bajo' 
+                            ? 'Stock Bajo' 
+                            : 'Stock Normal'}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                       <button
@@ -293,14 +359,12 @@ export default function ProductosPage() {
                       >
                         Ver/Editar
                       </button>
-                      {producto.activo && (
-                        <button
-                          onClick={() => handleDelete(producto.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Deshabilitar
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleToggleActive(producto.id, producto.activo)}
+                        className={producto.activo ? "text-red-600 hover:text-red-900" : "text-green-600 hover:text-green-900"}
+                      >
+                        {producto.activo ? 'Deshabilitar' : 'Habilitar'}
+                      </button>
                     </td>
                   </tr>
                 ))}

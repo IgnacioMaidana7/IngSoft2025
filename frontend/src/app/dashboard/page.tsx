@@ -1,14 +1,14 @@
 "use client";
 import React from "react";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
-import HomeButton from "@/components/common/HomeButton";
 import Container from "@/components/layout/Container";
 import Card from "@/components/layout/Card";
 
 export default function DashboardPage() {
   return (
     <ProtectedRoute>
-    <Container size="xl" className="min-h-[calc(100vh-200px)]">
+      <div className="min-h-screen bg-gray-50">        
+        <Container size="xl" className="py-8">
       {/* Hero Section */}
       <div className="text-center mb-12">
         <div className="inline-block p-4 bg-gradient-to-br from-primary/20 to-primary/10 rounded-3xl mb-6">
@@ -25,55 +25,19 @@ export default function DashboardPage() {
       </div>
 
       <main className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Navigation */}
+        {/* Main Content - Dashboard personalizado */}
         <div className="lg:col-span-2">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-text mb-4 flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary/80 rounded-lg flex items-center justify-center text-white text-sm">
-                🚀
-              </div>
-              Módulos Principales
-            </h2>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <HomeButton 
-              title="Ventas" 
-              icon="🛒" 
-              href="/ventas"
-              description="Procesar ventas y cobros"
-            />
-            <HomeButton 
-              title="Inventario" 
-              icon="📦" 
-              href="/inventario"
-              description="Control de stock y depósitos"
-            />
-            <HomeButton 
-              title="Productos" 
-              icon="🏷️" 
-              href="/productos"
-              description="Catálogo y precios"
-            />
-            <HomeButton 
-              title="Ofertas" 
-              icon="🎁" 
-              href="/ofertas"
-              description="Promociones especiales"
-            />
-            <HomeButton 
-              title="Empleados" 
-              icon="👥" 
-              href="/empleados"
-              description="Gestión de personal"
-            />
-            <HomeButton 
-              title="Cámara" 
-              icon="📸" 
-              href="/camera"
-              description="Escanear códigos y productos"
-            />
-          </div>
+          <Card>
+            <div className="p-6 text-center">
+              <div className="text-6xl mb-4">🏪</div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Panel de Administración
+              </h2>
+              <p className="text-gray-600">
+                Utiliza la navegación superior para acceder a todas las funciones del sistema
+              </p>
+            </div>
+          </Card>
         </div>
 
         {/* Sidebar */}
@@ -137,22 +101,10 @@ export default function DashboardPage() {
             </div>
           </Card>
 
-          {/* Status Card */}
-          <Card variant="glass" padding="lg">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-              <h3 className="text-lg font-bold text-text">Estado del Sistema</h3>
-            </div>
-            <div className="text-sm text-lightText">
-              <div className="flex justify-between items-center">
-                <span>Última sincronización</span>
-                <span className="text-green-600 font-medium">Hace 2 min</span>
-              </div>
-            </div>
-          </Card>
         </aside>
       </main>
-  </Container>
-  </ProtectedRoute>
+        </Container>
+      </div>
+    </ProtectedRoute>
   );
 }

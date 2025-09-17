@@ -95,3 +95,78 @@ class User(AbstractUser):
     
     def __str__(self):
         return f"{self.email} - {self.nombre_supermercado}"
+
+
+class EmpleadoUser(AbstractUser):
+    """Modelo de usuario para empleados del supermercado"""
+    
+    ROLES_CHOICES = [
+        ('CAJERO', 'Cajero'),
+        ('REPONEDOR', 'Reponedor'),
+    ]
+    
+    # Información personal
+    nombre = models.CharField(max_length=100, verbose_name="Nombre")
+    apellido = models.CharField(max_length=100, verbose_name="Apellido")
+    dni = models.CharField(max_length=8, unique=True, verbose_name="DNI")
+    
+    # Información laboral
+    puesto = models.CharField(
+        max_length=20,
+        choices=ROLES_CHOICES,
+        verbose_name="Puesto"
+    )
+    
+    # Relación con el supermercado administrador
+    supermercado = models.ForeignKey(
+        'User',
+        on_delete=models.CASCADE,
+        related_name='empleados_usuarios',
+        verbose_name="Supermercado"
+    )
+    
+    # Email ya está incluido en AbstractUser
+    email = models.EmailField(
+        unique=True,
+        verbose_name="Email",
+        help_text="Correo electrónico del empleado"
+    )
+    
+    # Usar email como campo de autenticación
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['username', 'nombre', 'apellido', 'dni', 'puesto']
+    
+    # Metadatos
+    activo = models.BooleanField(default=True)
+    fecha_registro = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "Usuario Empleado"
+        verbose_name_plural = "Usuarios Empleados"
+        # Evitar conflictos con el modelo User principal
+        db_table = 'authentication_empleado_user'
+    
+    # Evitar conflictos con el modelo User principal
+    groups = models.ManyToManyField(
+        'auth.Group',
+        verbose_name='groups',
+        blank=True,
+        help_text='The groups this user belongs to.',
+        related_name='empleado_users_set',
+        related_query_name='empleado_user',
+    )
+    user_permissions = models.ManyToManyField(
+        'auth.Permission',
+        verbose_name='user permissions',
+        blank=True,
+        help_text='Specific permissions for this user.',
+        related_name='empleado_users_set',
+        related_query_name='empleado_user',
+    )
+    
+    def get_nombre_completo(self):
+        """Retorna el nombre completo del empleado"""
+        return f"{self.nombre} {self.apellido}"
+    
+    def __str__(self):
+        return f"{self.get_nombre_completo()} - {self.puesto} ({self.supermercado.nombre_supermercado})"

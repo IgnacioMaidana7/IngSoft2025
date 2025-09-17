@@ -80,7 +80,7 @@ export default function VentasPage() {
 				</div>
 				</Card>
 			</Container>
-				{isModalVisible && (
+			{isModalVisible && (
 					<div className="fixed inset-0 bg-black/50 grid place-items-center">
 						<div className="bg-white rounded-2xl p-6 w-[360px] max-w-[90%] border border-border shadow-soft">
 							<h3 className="mt-0 font-bold text-lg">Enviar Ticket</h3>

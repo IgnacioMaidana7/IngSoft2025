@@ -10,12 +10,13 @@ from .serializers import (
     EmpleadoListSerializer, 
     EmpleadoCreateSerializer
 )
+from authentication.permissions import IsSupermercadoAdmin
 
 
 class EmpleadoListCreateView(generics.ListCreateAPIView):
     """Vista para listar y crear empleados"""
     
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSupermercadoAdmin]
     
     def get_serializer_class(self):
         if self.request.method == 'GET':
@@ -58,14 +59,14 @@ class EmpleadoDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Vista para obtener, actualizar y eliminar un empleado específico"""
     
     serializer_class = EmpleadoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSupermercadoAdmin]
     
     def get_queryset(self):
         return Empleado.objects.filter(supermercado=self.request.user)
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsSupermercadoAdmin])
 def obtener_empleados_por_deposito(request, deposito_id):
     """Obtiene todos los empleados de un depósito específico"""
     try:
@@ -101,7 +102,7 @@ def obtener_empleados_por_deposito(request, deposito_id):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsSupermercadoAdmin])
 def estadisticas_empleados(request):
     """Obtiene estadísticas generales de empleados"""
     try:
@@ -150,7 +151,7 @@ def estadisticas_empleados(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsSupermercadoAdmin])
 def cambiar_estado_empleado(request, pk):
     """Cambia el estado activo/inactivo de un empleado"""
     try:
@@ -178,7 +179,7 @@ def cambiar_estado_empleado(request, pk):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsSupermercadoAdmin])
 def obtener_roles_disponibles(request):
     """Obtiene la lista de roles disponibles para empleados"""
     roles = [
