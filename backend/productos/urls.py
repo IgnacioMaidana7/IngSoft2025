@@ -14,6 +14,8 @@ urlpatterns = [
     
     # URLs para stock de productos
     path('<int:producto_id>/stock/', views.gestionar_stock_producto, name='producto-stock'),
+    path('<int:producto_id>/stock-completo/', views.obtener_stock_completo_producto, name='producto-stock-completo'),
+    path('<int:producto_id>/actualizar-stock/', views.actualizar_stock_completo_producto, name='actualizar-stock-completo'),
     path('stock/<int:stock_id>/', views.stock_producto_detail, name='stock-detail'),
     path('deposito/<int:deposito_id>/', views.productos_por_deposito, name='productos-por-deposito'),
 ]

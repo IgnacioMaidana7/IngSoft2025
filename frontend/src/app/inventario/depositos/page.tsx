@@ -10,7 +10,9 @@ import { useToast } from "@/components/feedback/ToastProvider";
 import { 
   obtenerDepositos, 
   eliminarDeposito,
-  Deposito 
+  Deposito,
+  obtenerProductosPorDeposito,
+  type ProductosPorDeposito
 } from "@/lib/api";
 
 // Wrapper component to satisfy Next.js requirement: useSearchParams must be inside a Suspense boundary
@@ -39,6 +41,10 @@ function DepositosPageContent() {
   const [depositos, setDepositos] = useState<Deposito[]>([]);
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState<string>('');
+  const [stockOpen, setStockOpen] = useState(false);
+  const [stockLoading, setStockLoading] = useState(false);
+  const [stockData, setStockData] = useState<ProductosPorDeposito | null>(null);
+  const [stockError, setStockError] = useState<string | null>(null);
 
   // Cargar depósitos
   useEffect(() => {
@@ -82,6 +88,29 @@ function DepositosPageContent() {
         showToast(`Error al eliminar depósito: ${error}`, 'error');
       }
     }
+  };
+
+  const handleVerStock = async (deposito: Deposito) => {
+    if (!token) return;
+    try {
+      setStockError(null);
+      setStockLoading(true);
+      setStockOpen(true);
+      const data = await obtenerProductosPorDeposito(deposito.id, token);
+      setStockData(data);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Error al obtener el stock del depósito';
+      setStockError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setStockLoading(false);
+    }
+  };
+
+  const closeStock = () => {
+    setStockOpen(false);
+    setStockData(null);
+    setStockError(null);
   };
 
   // Filtrar depósitos por búsqueda
@@ -196,7 +225,7 @@ function DepositosPageContent() {
                   <div className="flex gap-2">
                     <Button 
                       variant="ghost"
-                      onClick={() => alert(`Ver stock de ${deposito.nombre} - Función por implementar`)}
+                      onClick={() => handleVerStock(deposito)}
                       className="text-blue-600 hover:text-blue-700 px-3 py-1 border border-blue-600 rounded hover:bg-blue-50 transition-colors"
                     >
                       Ver Stock
@@ -221,6 +250,56 @@ function DepositosPageContent() {
           </div>
         )}
       </Card>
+
+      {/* Modal Ver Stock */}
+      {stockOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={closeStock} />
+          <div className="relative bg-white rounded-lg shadow-lg w-full max-w-2xl mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Stock por Depósito</h2>
+              <button onClick={closeStock} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            {stockLoading ? (
+              <div className="py-10 text-center">Cargando stock...</div>
+            ) : stockError ? (
+              <div className="py-4 text-red-600">{stockError}</div>
+            ) : stockData ? (
+              <div>
+                <div className="mb-4 text-sm text-gray-600">
+                  <div><span className="font-medium">Depósito:</span> {stockData.deposito.nombre}</div>
+                  <div><span className="font-medium">Dirección:</span> {stockData.deposito.direccion}</div>
+                </div>
+                {stockData.productos.length === 0 ? (
+                  <div className="py-6 text-center text-gray-500">Este depósito no tiene stock registrado.</div>
+                ) : (
+                  <div className="overflow-x-auto border rounded-md">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {stockData.productos.map((p) => (
+                          <tr key={p.stock_id} className="hover:bg-gray-50">
+                            <td className="px-4 py-2 text-sm text-gray-900">{p.nombre}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{p.cantidad}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <div className="mt-4 flex justify-end">
+                  <Button onClick={closeStock}>Cerrar</Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
     </Container>
   );
 }

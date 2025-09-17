@@ -11,13 +11,11 @@ import {
   obtenerProducto,
   actualizarProducto,
   obtenerCategoriasDisponibles,
-  obtenerDepositos,
-  gestionarStockProducto,
-  actualizarStockProducto,
-  obtenerMiDeposito,
+  obtenerStockCompletoProducto,
+  actualizarStockCompletoProducto,
   CategoriaSimple,
-  Deposito,
-  Producto
+  Producto,
+  type StockCompleto
 } from "@/lib/api";
 
 export default function ProductoDetailPage() {
@@ -28,14 +26,12 @@ export default function ProductoDetailPage() {
   
   const [producto, setProducto] = useState<Producto | null>(null);
   const [categorias, setCategorias] = useState<CategoriaSimple[]>([]);
-  const [depositos, setDepositos] = useState<Deposito[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   // Estados para reponedor
   const [isReponedor, setIsReponedor] = useState(false);
-  const [miDeposito, setMiDeposito] = useState<Deposito | null>(null);
   
   // Estados para edición
   const [isEditing, setIsEditing] = useState(false);
@@ -47,12 +43,34 @@ export default function ProductoDetailPage() {
   });
 
   // Estados para gestión de stock
-  const [showAddStock, setShowAddStock] = useState(false);
-  const [newStock, setNewStock] = useState({
-    deposito: 0,
-    cantidad: 0,
-    cantidad_minima: 0
-  });
+  const [stockCompleto, setStockCompleto] = useState<StockCompleto[]>([]);
+  const [stockLoading, setStockLoading] = useState(false);
+  const [stockEditado, setStockEditado] = useState<{[key: number]: {cantidad: number, cantidad_minima: number}}>({});
+
+  const cargarStockCompleto = useCallback(async () => {
+    if (!token || !producto) return;
+    
+    try {
+      setStockLoading(true);
+      const stockData = await obtenerStockCompletoProducto(producto.id, token);
+      setStockCompleto(stockData.stocks);
+      
+      // Inicializar valores editables
+      const inicial: {[key: number]: {cantidad: number, cantidad_minima: number}} = {};
+      stockData.stocks.forEach(stock => {
+        inicial[stock.deposito_id] = {
+          cantidad: stock.cantidad,
+          cantidad_minima: stock.cantidad_minima
+        };
+      });
+      setStockEditado(inicial);
+    } catch (err: unknown) {
+      console.error('Error cargando stock completo:', err);
+      setError('Error cargando información de stock');
+    } finally {
+      setStockLoading(false);
+    }
+  }, [token, producto]);
 
   const cargarDatos = useCallback(async () => {
     if (!token) return;
@@ -66,21 +84,12 @@ export default function ProductoDetailPage() {
       setIsReponedor(esReponedor);
       
       // Cargar datos base
-      const [productoData, categoriasData, depositosData] = await Promise.all([
+      const [productoData, categoriasData] = await Promise.all([
         obtenerProducto(productId, token),
-        obtenerCategoriasDisponibles(token),
-        obtenerDepositos(token)
+        obtenerCategoriasDisponibles(token)
       ]);
       
-      // Si es reponedor, obtener su depósito asignado
-      if (esReponedor) {
-        try {
-          const depositoAsignado = await obtenerMiDeposito(token);
-          setMiDeposito(depositoAsignado);
-        } catch (err) {
-          console.error('Error obteniendo depósito del reponedor:', err);
-        }
-      }
+
       
       setProducto(productoData);
       setEditedData({
@@ -91,7 +100,6 @@ export default function ProductoDetailPage() {
       });
       
       setCategorias(categoriasData);
-      setDepositos(depositosData);
     } catch (err: unknown) {
       console.error('Error cargando datos:', err);
       setError('Error cargando datos del producto');
@@ -107,6 +115,13 @@ export default function ProductoDetailPage() {
     }
     cargarDatos();
   }, [token, router, cargarDatos]);
+
+  // useEffect separado para cargar stock completo después de tener el producto
+  useEffect(() => {
+    if (producto && token) {
+      cargarStockCompleto();
+    }
+  }, [producto, token, cargarStockCompleto]);
 
   const handleSaveProduct = async () => {
     if (!token || !producto) return;
@@ -125,60 +140,42 @@ export default function ProductoDetailPage() {
     }
   };
 
-  const handleAddStock = async () => {
+  const handleGuardarTodoStock = async () => {
     if (!token || !producto) return;
     
-    // Para reponedores, usar automáticamente su depósito asignado
-    const depositoId = isReponedor && miDeposito ? miDeposito.id : newStock.deposito;
-    
-    if (!depositoId) {
-      alert('Debes seleccionar un depósito');
-      return;
-    }
-
     try {
       setSaving(true);
-      await gestionarStockProducto(producto.id, {
-        ...newStock,
-        deposito: depositoId
-      }, token);
-      await cargarDatos(); // Recargar datos
-      setShowAddStock(false);
-      setNewStock({ deposito: 0, cantidad: 0, cantidad_minima: 0 });
-      alert('Stock agregado exitosamente');
+      
+      // Preparar datos para enviar
+      const stocksParaActualizar = Object.entries(stockEditado).map(([depositoId, stock]) => ({
+        deposito_id: Number(depositoId),
+        cantidad: stock.cantidad,
+        cantidad_minima: stock.cantidad_minima
+      }));
+      
+      await actualizarStockCompletoProducto(producto.id, stocksParaActualizar, token);
+      await cargarDatos(); // Recargar datos del producto
+      await cargarStockCompleto(); // Recargar stock completo
+      alert('Stock actualizado exitosamente');
     } catch (err: unknown) {
-      console.error('Error agregando stock:', err);
-      alert((err as Error).message || 'Error al agregar stock');
+      console.error('Error actualizando stock:', err);
+      alert((err as Error).message || 'Error al actualizar stock');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleUpdateStock = async (stockId: number, cantidad: number) => {
-    if (!token) return;
-    
-    try {
-      await actualizarStockProducto(stockId, { cantidad }, token);
-      await cargarDatos(); // Recargar datos
-      alert('Stock actualizado exitosamente');
-    } catch (err: unknown) {
-      console.error('Error actualizando stock:', err);
-      alert((err as Error).message || 'Error al actualizar stock');
-    }
+  const handleCambioStock = (depositoId: number, campo: 'cantidad' | 'cantidad_minima', valor: number) => {
+    setStockEditado(prev => ({
+      ...prev,
+      [depositoId]: {
+        ...prev[depositoId],
+        [campo]: valor
+      }
+    }));
   };
 
-  const handleUpdateStockMinimo = async (stockId: number, cantidadMinima: number) => {
-    if (!token) return;
-    
-    try {
-      await actualizarStockProducto(stockId, { cantidad_minima: cantidadMinima }, token);
-      await cargarDatos(); // Recargar datos
-      alert('Stock mínimo actualizado exitosamente');
-    } catch (err: unknown) {
-      console.error('Error actualizando stock mínimo:', err);
-      alert((err as Error).message || 'Error al actualizar stock mínimo');
-    }
-  };
+
 
   if (loading) {
     return (
@@ -339,51 +336,33 @@ export default function ProductoDetailPage() {
           <Card>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold text-text">Stock por Depósito</h2>
-              {!isReponedor && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setShowAddStock(true)}
-                >
-                  Agregar Stock
-                </Button>
-              )}
+              <Button
+                onClick={handleGuardarTodoStock}
+                disabled={saving || stockLoading}
+                variant="primary"
+              >
+                {saving ? 'Guardando...' : 'Guardar'}
+              </Button>
             </div>
 
-            {(() => {
-              // Filtrar stocks según el tipo de usuario
-              const stocksFiltrados = isReponedor && miDeposito 
-                ? producto.stocks.filter(stock => stock.deposito === miDeposito.id)
-                : producto.stocks;
-              
-              return stocksFiltrados.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-lightText mb-4">
-                    {isReponedor && miDeposito 
-                      ? `No hay stock registrado en tu depósito (${miDeposito.nombre})`
-                      : "No hay stock registrado en ningún depósito"
-                    }
-                  </p>
-                  <Button onClick={() => setShowAddStock(true)}>
-                    {isReponedor ? "Agregar Stock a Mi Depósito" : "Agregar Primer Stock"}
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {stocksFiltrados.map((stock) => (
-                  <div key={stock.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-2">
+            {stockLoading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                <p className="text-lightText">Cargando información de stock...</p>
+              </div>
+            ) : stockCompleto.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-lightText mb-4">No hay depósitos configurados</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {stockCompleto.map((stock) => (
+                  <div key={stock.deposito_id} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-4">
                       <div>
                         <h3 className="font-medium text-text">{stock.deposito_nombre}</h3>
                         <p className="text-sm text-lightText">{stock.deposito_direccion}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-lg font-bold text-primary">{stock.cantidad}</p>
-                        <p className="text-xs text-lightText">unidades</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex justify-between items-center">
                       <div className="flex gap-2">
                         <span className={`px-2 py-1 rounded text-xs font-medium ${
                           stock.tiene_stock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
@@ -396,141 +375,47 @@ export default function ProductoDetailPage() {
                           </span>
                         )}
                       </div>
-                      
-                      <div className="flex gap-2">
-                        <Input
-                          type="number"
-                          min="0"
-                          defaultValue={stock.cantidad}
-                          className="w-20"
-                          id={`stock-${stock.id}`}
-                          onBlur={!isReponedor ? ((e) => {
-                            const newValue = Number(e.target.value);
-                            if (newValue !== stock.cantidad) {
-                              handleUpdateStock(stock.id, newValue);
-                            }
-                          }) : undefined}
-                        />
-                        {isReponedor && (
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              const input = document.getElementById(`stock-${stock.id}`) as HTMLInputElement;
-                              const newValue = Number(input.value);
-                              if (newValue !== stock.cantidad) {
-                                handleUpdateStock(stock.id, newValue);
-                              }
-                            }}
-                          >
-                            Guardar
-                          </Button>
-                        )}
-                      </div>
                     </div>
                     
-                    {!isReponedor ? (
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="text-xs text-lightText">Mínimo:</span>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-text mb-1">Cantidad</label>
                         <Input
                           type="number"
                           min="0"
-                          defaultValue={stock.cantidad_minima}
-                          className="w-16 text-xs"
-                          id={`min-stock-${stock.id}`}
-                          onBlur={(e) => {
-                            const newValue = Number(e.target.value);
-                            if (newValue !== stock.cantidad_minima) {
-                              handleUpdateStockMinimo(stock.id, newValue);
-                            }
-                          }}
+                          value={stockEditado[stock.deposito_id]?.cantidad ?? stock.cantidad}
+                          onChange={(e) => handleCambioStock(stock.deposito_id, 'cantidad', Number(e.target.value))}
+                          className="w-full"
                         />
-                        <span className="text-xs text-lightText">| Actualizado: {new Date(stock.fecha_modificacion).toLocaleDateString()}</span>
                       </div>
-                    ) : (
+                      
+                      {!isReponedor && (
+                        <div>
+                          <label className="block text-sm font-medium text-text mb-1">Stock Mínimo</label>
+                          <Input
+                            type="number"
+                            min="0"
+                            value={stockEditado[stock.deposito_id]?.cantidad_minima ?? stock.cantidad_minima}
+                            onChange={(e) => handleCambioStock(stock.deposito_id, 'cantidad_minima', Number(e.target.value))}
+                            className="w-full"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    
+                    {stock.fecha_modificacion && (
                       <p className="text-xs text-lightText mt-2">
-                        Mínimo: {stock.cantidad_minima} | Actualizado: {new Date(stock.fecha_modificacion).toLocaleDateString()}
+                        {isReponedor && `Mínimo: ${stock.cantidad_minima} | `}
+                        Actualizado: {new Date(stock.fecha_modificacion).toLocaleDateString()}
                       </p>
                     )}
                   </div>
-                  ))}
-                </div>
-              );
-            })()}
+                ))}
+              </div>
+            )}
           </Card>
 
-          {/* Modal para agregar stock */}
-          {showAddStock && (
-            <Card>
-              <h3 className="text-lg font-semibold text-text mb-4">
-                {isReponedor ? "Agregar Stock a Mi Depósito" : "Agregar Stock"}
-              </h3>
-              <div className="space-y-4">
-                {isReponedor && miDeposito ? (
-                  <div>
-                    <label className="block text-sm font-medium text-text mb-2">Depósito</label>
-                    <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
-                      <p className="text-text">{miDeposito.nombre} - {miDeposito.direccion}</p>
-                      <p className="text-xs text-lightText">Tu depósito asignado</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <label className="block text-sm font-medium text-text mb-2">Depósito</label>
-                    <select
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                      value={newStock.deposito}
-                      onChange={(e) => setNewStock(prev => ({ ...prev, deposito: Number(e.target.value) }))}
-                    >
-                      <option value={0}>Seleccionar depósito</option>
-                      {depositos
-                        .filter(deposito => !producto.stocks.some(stock => stock.deposito === deposito.id))
-                        .map((deposito) => (
-                          <option key={deposito.id} value={deposito.id}>
-                            {deposito.nombre} - {deposito.direccion}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                )}
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-text mb-2">Cantidad</label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={newStock.cantidad}
-                      onChange={(e) => setNewStock(prev => ({ ...prev, cantidad: Number(e.target.value) }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-text mb-2">Stock Mínimo</label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={newStock.cantidad_minima}
-                      onChange={(e) => setNewStock(prev => ({ ...prev, cantidad_minima: Number(e.target.value) }))}
-                    />
-                  </div>
-                </div>
-                
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={() => setShowAddStock(false)}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    onClick={handleAddStock}
-                    disabled={saving}
-                  >
-                    {saving ? 'Guardando...' : (isReponedor ? 'Guardar Stock' : 'Agregar Stock')}
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          )}
+
         </div>
       </div>
     </Container>

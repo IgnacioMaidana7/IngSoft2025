@@ -632,6 +632,61 @@ export async function actualizarStockProducto(
   });
 }
 
+export interface StockCompleto {
+  deposito_id: number;
+  deposito_nombre: string;
+  deposito_direccion: string;
+  cantidad: number;
+  cantidad_minima: number;
+  stock_id: number | null;
+  tiene_stock: boolean;
+  stock_bajo: boolean;
+  fecha_modificacion: string | null;
+}
+
+export interface StockCompletoResponse {
+  producto: {
+    id: number;
+    nombre: string;
+  };
+  stocks: StockCompleto[];
+}
+
+export async function obtenerStockCompletoProducto(
+  productoId: number,
+  token: string
+): Promise<StockCompletoResponse> {
+  return apiFetch<StockCompletoResponse>(`/api/productos/${productoId}/stock-completo/`, {
+    method: 'GET',
+    token
+  });
+}
+
+export interface ResultadoActualizacion {
+  deposito_id: number;
+  deposito_nombre?: string;
+  cantidad?: number;
+  cantidad_minima?: number;
+  actualizado: boolean;
+  error?: string;
+}
+
+export async function actualizarStockCompletoProducto(
+  productoId: number,
+  stocks: Array<{
+    deposito_id: number;
+    cantidad: number;
+    cantidad_minima: number;
+  }>,
+  token: string
+): Promise<{mensaje: string; resultados: ResultadoActualizacion[]}> {
+  return apiFetch<{mensaje: string; resultados: ResultadoActualizacion[]}>(`/api/productos/${productoId}/actualizar-stock/`, {
+    method: 'POST',
+    body: { stocks },
+    token
+  });
+}
+
 // === NOTIFICACIONES ===
 export interface Notificacion {
   id: number;
