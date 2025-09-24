@@ -11,6 +11,7 @@ class Notificacion(models.Model):
         ("STOCK_MINIMO", "Stock mínimo alcanzado"),
         ("INFO", "Información"),
         ("ALERTA", "Alerta"),
+        ("TRANSFERENCIA", "Transferencia de productos"),
     ]
 
     # Destinatarios: puede ser un admin (User) o un empleado (EmpleadoUser)

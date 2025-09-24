@@ -82,6 +82,70 @@ export async function apiFetch<TResponse>(
   return (await response.text()) as unknown as TResponse;
 }
 
+export async function downloadFile(
+  path: string,
+  options: {
+    token?: string | null;
+    headers?: Record<string, string>;
+  } = {}
+): Promise<Blob> {
+  const { token, headers = {} } = options;
+
+  const finalHeaders: Record<string, string> = {
+    ...headers,
+  };
+
+  if (token) finalHeaders["Authorization"] = `Bearer ${token}`;
+
+  if (!API_BASE_URL) {
+    throw new Error("Backend no configurado. Define NEXT_PUBLIC_API_BASE_URL para habilitar la conexión.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'GET',
+    headers: finalHeaders,
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    let errorMessage = `HTTP ${response.status}`;
+    
+    try {
+      const errorData = await response.json();
+      
+      // Si es un error de validación de Django (400), extraer los mensajes
+      if (response.status === 400 && errorData) {
+        const errorMessages: string[] = [];
+        
+        // Manejar errores de campo específicos
+        if (typeof errorData === 'object') {
+          Object.entries(errorData).forEach(([field, messages]) => {
+            if (Array.isArray(messages)) {
+              errorMessages.push(`${field}: ${messages.join(', ')}`);
+            } else {
+              errorMessages.push(`${field}: ${messages}`);
+            }
+          });
+        }
+        
+        if (errorMessages.length > 0) {
+          errorMessage = errorMessages.join('; ');
+        }
+      } else if (errorData.detail) {
+        errorMessage = errorData.detail;
+      } else if (errorData.message) {
+        errorMessage = errorData.message;
+      }
+    } catch {
+      // Si no se puede parsear como JSON, usar el status por defecto
+    }
+    
+    throw new Error(`Error descargando archivo: ${errorMessage}`);
+  }
+
+  return response.blob();
+}
+
 export async function uploadPhoto(
   file: File,
   token?: string | null
@@ -714,5 +778,9 @@ export async function marcarNotificacionLeida(id: number, token: string): Promis
     token
   });
 }
+
+
+
+
 
 

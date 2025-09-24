@@ -13,7 +13,7 @@ export default function InventarioHomePage() {
           <h2 style={{ fontSize: 22, fontWeight: 700, color: COLORS.text, textAlign: 'center', marginBottom: 30 }}>¿Qué desea hacer?</h2>
           <div style={{ width: '100%', maxWidth: 520, margin: '0 auto' }}>
             <HomeButton title="Gestionar mis Depósitos" icon="🏢" href="/inventario/depositos" />
-            <HomeButton title="Realizar una Transferencia" icon="🔁" href="/inventario/transferir" />
+            <HomeButton title="Gestionar Transferencias" icon="🔁" href="/inventario/transferencias" />
             <HomeButton title="Historial de Movimientos" icon="🧾" href="/inventario/movimientos" />
           </div>
         </Card>

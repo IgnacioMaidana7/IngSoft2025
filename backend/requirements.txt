@@ -29,3 +29,6 @@ pytz==2023.3
 
 # Filtering for API
 django-filter==23.2
+
+# PDF generation
+reportlab==4.0.4
