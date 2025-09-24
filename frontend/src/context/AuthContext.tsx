@@ -6,14 +6,12 @@ type AuthContextValue = {
   token: string | null;
   login: (email?: string, password?: string) => Promise<void>;
   logout: () => void;
-  isLoading: boolean;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Verificar primero access_token (JWT), luego auth_token (token de sesión)
@@ -25,9 +23,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } else if (auth && auth !== "fake-token") {
       setToken(auth);
     }
-    
-    // Marcar como completada la carga inicial
-    setIsLoading(false);
   }, []);
 
   useEffect(() => {
@@ -41,20 +36,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void _email;
     void _password;
     
-    setIsLoading(true);
-    
     // Priorizar access_token (JWT) sobre auth_token
     const access = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
     
     if (access) {
       setToken(access);
     } else {
-      // Si no hay token real, el usuario no está autenticado
-      console.log("No hay token disponible, usuario no autenticado");
-      setToken(null);
+      // Solo usar fake-token como último recurso para testing
+      console.warn("No hay token real disponible, usando token de prueba");
+      setToken("fake-token");
     }
-    
-    setIsLoading(false);
   }, []);
 
   const logout = useCallback(() => {
@@ -70,13 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(null);
   }, []);
 
-  const value = useMemo<AuthContextValue>(() => ({ 
-    isLoggedIn: !!token, 
-    token, 
-    login, 
-    logout, 
-    isLoading 
-  }), [token, login, logout, isLoading]);
+  const value = useMemo<AuthContextValue>(() => ({ isLoggedIn: !!token, token, login, logout }), [token, login, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
