@@ -779,8 +779,180 @@ export async function marcarNotificacionLeida(id: number, token: string): Promis
   });
 }
 
+// === VENTAS ===
+export interface Venta {
+  id: number;
+  numero_venta: string;
+  cajero: number;
+  cajero_nombre: string;
+  cliente_telefono?: string;
+  subtotal: string;
+  descuento: string;
+  total: string;
+  estado: 'PENDIENTE' | 'PROCESANDO' | 'COMPLETADA' | 'CANCELADA';
+  fecha_creacion: string;
+  fecha_completada?: string;
+  observaciones?: string;
+  ticket_pdf_generado: boolean;
+  enviado_whatsapp: boolean;
+  items: ItemVenta[];
+  numero_items: number;
+}
 
+export interface ItemVenta {
+  id: number;
+  producto: number;
+  producto_nombre: string;
+  cantidad: number;
+  precio_unitario: string;
+  subtotal: string;
+  fecha_agregado: string;
+}
 
+export interface ProductoDisponible {
+  id: number;
+  nombre: string;
+  categoria: string;
+  precio: string;
+  descripcion?: string;
+  stock_disponible: number;
+}
 
+export interface CrearVentaRequest {
+  cliente_telefono?: string;
+  observaciones?: string;
+}
 
+export interface AgregarProductoRequest {
+  producto_id: number;
+  cantidad: number;
+}
 
+export interface ActualizarItemRequest {
+  item_id: number;
+  cantidad: number;
+}
+
+export interface FinalizarVentaRequest {
+  cliente_telefono?: string;
+  observaciones?: string;
+  enviar_whatsapp?: boolean;
+}
+
+// Crear nueva venta
+export async function crearVenta(data: CrearVentaRequest, token: string): Promise<Venta> {
+  return apiFetch<Venta>('/api/ventas/ventas/', {
+    method: 'POST',
+    body: data,
+    token
+  });
+}
+
+// Obtener ventas del cajero
+export async function obtenerVentas(token: string): Promise<Venta[]> {
+  const resp = await apiFetch<PaginatedResponse<Venta> | Venta[]>('/api/ventas/ventas/', {
+    method: 'GET',
+    token
+  });
+  if (Array.isArray(resp)) return resp;
+  return resp.results || [];
+}
+
+// Obtener una venta específica
+export async function obtenerVenta(id: number, token: string): Promise<Venta> {
+  return apiFetch<Venta>(`/api/ventas/ventas/${id}/`, {
+    method: 'GET',
+    token
+  });
+}
+
+// Agregar producto a una venta
+export async function agregarProductoAVenta(ventaId: number, data: AgregarProductoRequest, token: string): Promise<{ message: string; item: ItemVenta; venta: Venta }> {
+  return apiFetch<{ message: string; item: ItemVenta; venta: Venta }>(`/api/ventas/ventas/${ventaId}/agregar_producto/`, {
+    method: 'POST',
+    body: data,
+    token
+  });
+}
+
+// Actualizar cantidad de un item en la venta
+export async function actualizarItemVenta(ventaId: number, data: ActualizarItemRequest, token: string): Promise<{ message: string; item: ItemVenta; venta: Venta }> {
+  return apiFetch<{ message: string; item: ItemVenta; venta: Venta }>(`/api/ventas/ventas/${ventaId}/actualizar_item/`, {
+    method: 'PATCH',
+    body: data,
+    token
+  });
+}
+
+// Eliminar item de la venta
+export async function eliminarItemVenta(ventaId: number, itemId: number, token: string): Promise<{ message: string; venta: Venta }> {
+  return apiFetch<{ message: string; venta: Venta }>(`/api/ventas/ventas/${ventaId}/eliminar_item/`, {
+    method: 'DELETE',
+    body: { item_id: itemId },
+    token
+  });
+}
+
+// Finalizar venta
+export async function finalizarVenta(ventaId: number, data: FinalizarVentaRequest, token: string): Promise<{ message: string; venta: Venta }> {
+  return apiFetch<{ message: string; venta: Venta }>(`/api/ventas/ventas/${ventaId}/finalizar/`, {
+    method: 'POST',
+    body: data,
+    token
+  });
+}
+
+// Cancelar venta
+export async function cancelarVenta(ventaId: number, token: string): Promise<{ message: string; venta: Venta }> {
+  return apiFetch<{ message: string; venta: Venta }>(`/api/ventas/ventas/${ventaId}/cancelar/`, {
+    method: 'POST',
+    token
+  });
+}
+
+// Obtener productos disponibles para venta
+export async function obtenerProductosDisponibles(token: string): Promise<ProductoDisponible[]> {
+  return apiFetch<ProductoDisponible[]>('/api/ventas/productos-disponibles/', {
+    method: 'GET',
+    token
+  });
+}
+
+// Buscar productos
+export async function buscarProductos(query: string, token: string): Promise<ProductoDisponible[]> {
+  return apiFetch<ProductoDisponible[]>(`/api/ventas/buscar-productos/?q=${encodeURIComponent(query)}`, {
+    method: 'GET',
+    token
+  });
+}
+
+// Descargar ticket PDF
+export async function descargarTicketPDF(ventaId: number, token: string): Promise<void> {
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'}/api/ventas/ventas/${ventaId}/descargar_ticket/`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error al descargar PDF: ${response.status}`);
+    }
+
+    // Crear blob y descargar archivo
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `ticket_venta_${ventaId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Error descargando PDF:', error);
+    throw error;
+  }
+}
