@@ -438,9 +438,9 @@ class DepositoAPITestCase(APITestCase):
         self.assertIn('depositos_inactivos', estadisticas)
         self.assertGreaterEqual(estadisticas['total_depositos'], 1)
     
-    def test_acceso_solo_depositos_propios(self):
-        """Test: Un administrador solo puede acceder a sus propios depósitos"""
-        # Crear otro usuario/supermercado
+    def test_administrador_unico_accede_todos_depositos(self):
+        """Test: El administrador único puede acceder a todos los depósitos del sistema"""
+        # Crear otro usuario/supermercado (simulando datos existentes)
         otro_user = User.objects.create_user(
             username='otro_admin_api',
             email='otroapi@test.com',
@@ -452,19 +452,21 @@ class DepositoAPITestCase(APITestCase):
         )
         
         # Crear depósito para el otro usuario
-        deposito_ajeno = Deposito.objects.create(
-            nombre='Depósito Ajeno API',
-            direccion='Dirección Ajena 123',
+        deposito_otro = Deposito.objects.create(
+            nombre='Depósito Otro Usuario API',
+            direccion='Dirección Otro 123',
             supermercado=otro_user
         )
         
-        # Intentar acceder al depósito ajeno
-        url = reverse('deposito-detail', kwargs={'pk': deposito_ajeno.id})
+        # El administrador único debe poder acceder a cualquier depósito
+        url = reverse('deposito-detail', kwargs={'pk': deposito_otro.id})
         response = self.client.get(url)
         
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        # COMPORTAMIENTO CORRECTO: El administrador único tiene acceso completo
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['nombre'], 'Depósito Otro Usuario API')
         
-        # Verificar que solo ve sus propios depósitos en el listado
+        # Verificar que puede ver todos los depósitos en el listado
         url_list = reverse('deposito-list-create')
         response = self.client.get(url_list)
         
@@ -473,13 +475,10 @@ class DepositoAPITestCase(APITestCase):
         # Los datos están en results debido a la paginación
         results = response.data.get('results', response.data)
         
-        # Verificar que ningún depósito del otro usuario está en la respuesta
-        for deposito in results:
-            self.assertNotEqual(deposito['nombre'], 'Depósito Ajeno API')
-            
-        # Verificar que al menos su propio depósito está presente
-        depositos_propios = [d for d in results if d['nombre'] == 'Depósito Existente API']
-        self.assertEqual(len(depositos_propios), 1)
+        # Debe ver tanto su depósito como el de otros usuarios
+        nombres_depositos = [d['nombre'] for d in results]
+        self.assertIn('Depósito Existente API', nombres_depositos)
+        self.assertIn('Depósito Otro Usuario API', nombres_depositos)
     
     def test_autenticacion_requerida(self):
         """Test: Se requiere autenticación para acceder a las APIs"""
@@ -489,3 +488,238 @@ class DepositoAPITestCase(APITestCase):
         response = self.client.get(url)
         
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ==========================================
+# TESTS ESPECÍFICOS PARA INVENTARIO RELACIONADOS CON HU: 
+# "Como administrador quiero visualizar el stock total y de cada depósito"
+# ==========================================
+
+class DepositoStockVisualizationTestCase(APITestCase):
+    """Tests específicos de inventario para la HU de visualización de stock"""
+    
+    def setUp(self):
+        """Configuración para tests de depósitos en contexto de stock"""
+        # Crear usuario/supermercado
+        self.user = User.objects.create_user(
+            username='admin_stock_deposito',
+            email='admin@stockdeposito.com',
+            password='testpass123',
+            nombre_supermercado='Super Stock Deposito',
+            cuil='20123456789',
+            provincia='Buenos Aires',
+            localidad='La Plata'
+        )
+        
+        # Autenticar el cliente
+        self.client.force_authenticate(user=self.user)
+        
+        # Crear múltiples depósitos para testing
+        self.deposito_principal = Deposito.objects.create(
+            nombre='Depósito Principal Stock',
+            direccion='Av. Principal 100',
+            descripcion='Depósito principal para stock',
+            supermercado=self.user
+        )
+        
+        self.deposito_secundario = Deposito.objects.create(
+            nombre='Depósito Secundario Stock',
+            direccion='Calle Secundaria 200',
+            descripcion='Depósito secundario para stock',
+            supermercado=self.user
+        )
+        
+        self.deposito_inactivo = Deposito.objects.create(
+            nombre='Depósito Inactivo Stock',
+            direccion='Calle Inactiva 300',
+            descripcion='Depósito inactivo',
+            activo=False,
+            supermercado=self.user
+        )
+    
+    def test_listar_depositos_para_gestion_stock(self):
+        """
+        Test CA2: Verificar que la vista "Gestionar mis Depósitos" muestre 
+        todos los depósitos disponibles para gestión de stock.
+        """
+        url = reverse('deposito-list-create')
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Los datos pueden estar en 'results' si hay paginación
+        depositos = response.data.get('results', response.data)
+        
+        # Filtrar depósitos de este test
+        depositos_test = [d for d in depositos if 'Stock' in d['nombre']]
+        
+        # Debe mostrar depósitos activos e inactivos (para gestión completa)
+        nombres_depositos = [d['nombre'] for d in depositos_test]
+        self.assertIn('Depósito Principal Stock', nombres_depositos)
+        self.assertIn('Depósito Secundario Stock', nombres_depositos)
+        self.assertIn('Depósito Inactivo Stock', nombres_depositos)
+        
+        # Verificar campos necesarios para gestión de stock
+        for deposito in depositos_test:
+            self.assertIn('id', deposito)
+            self.assertIn('nombre', deposito)
+            self.assertIn('direccion', deposito)
+            self.assertIn('activo', deposito)
+    
+    def test_obtener_depositos_disponibles_para_stock(self):
+        """
+        Test CA2: Verificar que se puedan obtener solo depósitos ACTIVOS 
+        para asignación de stock.
+        """
+        url = reverse('depositos-disponibles')
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        self.assertIn('data', response.data)
+        
+        depositos_disponibles = response.data['data']
+        
+        # Filtrar depósitos de este test
+        depositos_test = [d for d in depositos_disponibles if 'Stock' in d['nombre']]
+        
+        # Solo debe mostrar depósitos ACTIVOS
+        nombres_activos = [d['nombre'] for d in depositos_test]
+        self.assertIn('Depósito Principal Stock', nombres_activos)
+        self.assertIn('Depósito Secundario Stock', nombres_activos)
+        self.assertNotIn('Depósito Inactivo Stock', nombres_activos)
+        
+        # Verificar estructura de datos para uso en selección de depósitos
+        for deposito in depositos_test:
+            self.assertIn('id', deposito)
+            self.assertIn('nombre', deposito)
+            self.assertIn('direccion', deposito)
+    
+    def test_estadisticas_depositos_para_stock(self):
+        """
+        Test: Verificar que las estadísticas de depósitos proporcionen 
+        información útil para gestión de stock.
+        """
+        url = reverse('estadisticas-depositos')
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        
+        estadisticas = response.data['data']
+        
+        # Verificar estadísticas relevantes para stock
+        self.assertIn('total_depositos', estadisticas)
+        self.assertIn('depositos_activos', estadisticas)
+        self.assertIn('depositos_inactivos', estadisticas)
+        
+        # Verificar valores correctos
+        self.assertEqual(estadisticas['depositos_activos'], 2)  # Principal + Secundario
+        self.assertEqual(estadisticas['depositos_inactivos'], 1)  # Inactivo
+        self.assertEqual(estadisticas['total_depositos'], 3)
+    
+    def test_detalle_deposito_para_contexto_stock(self):
+        """
+        Test CA2: Verificar que el detalle de un depósito proporcione 
+        información completa para el contexto de gestión de stock.
+        """
+        url = reverse('deposito-detail', kwargs={'pk': self.deposito_principal.id})
+        
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        deposito = response.data
+        
+        # Verificar información completa del depósito
+        self.assertEqual(deposito['nombre'], 'Depósito Principal Stock')
+        self.assertEqual(deposito['direccion'], 'Av. Principal 100')
+        self.assertEqual(deposito['descripcion'], 'Depósito principal para stock')
+        self.assertTrue(deposito['activo'])
+        
+        # Verificar campos de auditoría (útiles para gestión)
+        self.assertIn('fecha_creacion', deposito)
+        self.assertIn('fecha_modificacion', deposito)
+    
+    def test_comportamiento_actual_filtrado_por_supermercado(self):
+        """
+        Test que documenta el comportamiento actual: Las vistas de inventario 
+        filtran por supermercado del usuario autenticado.
+        
+        NOTA: Este comportamiento es diferente al de las vistas de productos,
+        donde no hay filtrado por supermercado.
+        """
+        # Crear otro usuario/supermercado
+        otro_user = User.objects.create_user(
+            username='otro_admin_stock',
+            email='otro@stockdeposito.com',
+            password='testpass123',
+            nombre_supermercado='Otro Super Stock',
+            cuil='20987654321',
+            provincia='Buenos Aires',
+            localidad='La Plata'
+        )
+        
+        # Crear depósito del otro usuario
+        deposito_otro = Deposito.objects.create(
+            nombre='Depósito Otro Usuario Stock',
+            direccion='Calle Otro Stock 999',
+            supermercado=otro_user
+        )
+        
+        # COMPORTAMIENTO ACTUAL: No puede acceder a depósitos de otros usuarios
+        url = reverse('deposito-detail', kwargs={'pk': deposito_otro.id})
+        response = self.client.get(url)
+        
+        # Las vistas de inventario filtran por supermercado del usuario
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        
+        # Verificar que solo ve sus propios depósitos en el listado
+        url_list = reverse('deposito-list-create')
+        response = self.client.get(url_list)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        depositos = response.data.get('results', response.data)
+        
+        # Solo ve sus propios depósitos (comportamiento actual)
+        nombres_depositos = [d['nombre'] for d in depositos]
+        self.assertNotIn('Depósito Otro Usuario Stock', nombres_depositos)
+        self.assertIn('Depósito Principal Stock', nombres_depositos)
+	
+    def test_modificar_deposito_para_optimizar_stock(self):
+        """
+        Test: Verificar que se pueda modificar información de depósitos 
+        para optimizar la gestión de stock (ej: cambiar estado activo/inactivo).
+        """
+        url = reverse('deposito-detail', kwargs={'pk': self.deposito_secundario.id})
+        
+        # Modificar depósito para desactivarlo (no recibir más stock)
+        datos_modificados = {
+            'nombre': 'Depósito Secundario Stock (Desactivado)',
+            'direccion': 'Calle Secundaria 200',
+            'descripcion': 'Depósito desactivado temporalmente',
+            'activo': False
+        }
+        
+        response = self.client.put(url, datos_modificados, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Verificar cambios
+        deposito_actualizado = response.data
+        self.assertEqual(deposito_actualizado['nombre'], 'Depósito Secundario Stock (Desactivado)')
+        self.assertFalse(deposito_actualizado['activo'])
+        
+        # Verificar que ya no aparece en depósitos disponibles
+        url_disponibles = reverse('depositos-disponibles')
+        response = self.client.get(url_disponibles)
+        
+        depositos_disponibles = response.data['data']
+        nombres_disponibles = [d['nombre'] for d in depositos_disponibles]
+        self.assertNotIn('Depósito Secundario Stock (Desactivado)', nombres_disponibles)
+        
+        # Pero sí debe aparecer el principal que sigue activo
+        self.assertIn('Depósito Principal Stock', nombres_disponibles)
