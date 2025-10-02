@@ -102,6 +102,7 @@ export default function Navbar() {
         { href: '/productos', label: 'Productos', icon: '🛍️' },
         { href: '/inventario', label: 'Inventario', icon: '📦' },
         { href: '/ventas', label: 'Ventas', icon: '💰' },
+        { href: '/ventas/historial', label: 'Historial', icon: '📋' },
         { href: '/empleados', label: 'Empleados', icon: '👥' },
         { href: '/ofertas', label: 'Ofertas', icon: '🏷️' }
       ];

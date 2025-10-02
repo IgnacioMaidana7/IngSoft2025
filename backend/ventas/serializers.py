@@ -264,3 +264,49 @@ class FinalizarVentaSerializer(serializers.Serializer):
             
             return telefono_limpio
         return value
+
+
+class HistorialVentaSerializer(serializers.ModelSerializer):
+    """Serializer para el historial de ventas (solo para administradores)"""
+    cajero_nombre = serializers.SerializerMethodField()
+    empleado_cajero_nombre = serializers.SerializerMethodField()
+    fecha_formateada = serializers.SerializerMethodField()
+    total_formateado = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Venta
+        fields = [
+            'id',
+            'numero_venta',
+            'cajero_nombre',
+            'empleado_cajero_nombre',
+            'cliente_telefono',
+            'fecha_creacion',
+            'fecha_formateada',
+            'total',
+            'total_formateado',
+            'estado',
+            'ticket_pdf_generado'
+        ]
+    
+    def get_cajero_nombre(self, obj):
+        """Obtener el nombre del cajero (admin o empleado)"""
+        if obj.empleado_cajero:
+            return f"{obj.empleado_cajero.first_name} {obj.empleado_cajero.last_name}".strip()
+        return f"{obj.cajero.first_name} {obj.cajero.last_name}".strip() or obj.cajero.username
+    
+    def get_empleado_cajero_nombre(self, obj):
+        """Obtener el nombre del empleado cajero si existe"""
+        if obj.empleado_cajero:
+            return f"{obj.empleado_cajero.first_name} {obj.empleado_cajero.last_name}".strip()
+        return None
+    
+    def get_fecha_formateada(self, obj):
+        """Formatear la fecha para mostrar"""
+        if obj.fecha_creacion:
+            return obj.fecha_creacion.strftime("%d/%m/%Y %H:%M")
+        return None
+    
+    def get_total_formateado(self, obj):
+        """Formatear el total como string con símbolo de moneda"""
+        return f"${obj.total}"

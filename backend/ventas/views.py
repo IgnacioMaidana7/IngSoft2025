@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.db import transaction
+from django.db import transaction, models
 from django.http import HttpResponse
 from decimal import Decimal
 
@@ -14,10 +14,11 @@ from .serializers import (
     ItemVentaSerializer, 
     CrearItemVentaSerializer,
     ActualizarItemVentaSerializer,
-    FinalizarVentaSerializer
+    FinalizarVentaSerializer,
+    HistorialVentaSerializer
 )
 from productos.models import Producto, ProductoDeposito
-from authentication.permissions import IsCajeroOrAdmin
+from authentication.permissions import IsCajeroOrAdmin, IsSupermercadoAdmin
 from .pdf_generator import generar_ticket_pdf_response, guardar_ticket_pdf
 
 
@@ -479,5 +480,118 @@ def buscar_productos(request):
     except Exception as e:
         return Response(
             {'error': f'Error en la búsqueda: {str(e)}'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated, IsSupermercadoAdmin])
+def historial_ventas(request):
+    """
+    Vista para obtener el historial completo de ventas.
+    Solo accesible para administradores de supermercado.
+    """
+    try:
+        # Obtener todas las ventas del supermercado del administrador
+        ventas = Venta.objects.filter(cajero=request.user).order_by('-fecha_creacion')
+        
+        # Filtros opcionales
+        estado = request.GET.get('estado')
+        fecha_desde = request.GET.get('fecha_desde')
+        fecha_hasta = request.GET.get('fecha_hasta')
+        cajero_nombre = request.GET.get('cajero')
+        
+        # Aplicar filtros
+        if estado and estado in [choice[0] for choice in Venta.ESTADO_CHOICES]:
+            ventas = ventas.filter(estado=estado)
+        
+        if fecha_desde:
+            try:
+                from datetime import datetime
+                fecha_desde_obj = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+                ventas = ventas.filter(fecha_creacion__date__gte=fecha_desde_obj)
+            except ValueError:
+                return Response(
+                    {'error': 'Formato de fecha_desde inválido. Use YYYY-MM-DD'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        if fecha_hasta:
+            try:
+                from datetime import datetime
+                fecha_hasta_obj = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+                ventas = ventas.filter(fecha_creacion__date__lte=fecha_hasta_obj)
+            except ValueError:
+                return Response(
+                    {'error': 'Formato de fecha_hasta inválido. Use YYYY-MM-DD'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        if cajero_nombre:
+            # Buscar por nombre de empleado cajero o usuario cajero
+            ventas = ventas.filter(
+                models.Q(empleado_cajero__first_name__icontains=cajero_nombre) |
+                models.Q(empleado_cajero__last_name__icontains=cajero_nombre) |
+                models.Q(cajero__first_name__icontains=cajero_nombre) |
+                models.Q(cajero__last_name__icontains=cajero_nombre) |
+                models.Q(cajero__username__icontains=cajero_nombre)
+            )
+        
+        # Paginación
+        from django.core.paginator import Paginator
+        page_size = int(request.GET.get('page_size', 20))  # 20 ventas por página por defecto
+        page_number = int(request.GET.get('page', 1))
+        
+        paginator = Paginator(ventas, page_size)
+        page_obj = paginator.get_page(page_number)
+        
+        serializer = HistorialVentaSerializer(page_obj, many=True)
+        
+        return Response({
+            'count': paginator.count,
+            'num_pages': paginator.num_pages,
+            'current_page': page_number,
+            'has_next': page_obj.has_next(),
+            'has_previous': page_obj.has_previous(),
+            'results': serializer.data
+        })
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Error al obtener historial de ventas: {str(e)}'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated, IsSupermercadoAdmin])
+def descargar_ticket_pdf(request, venta_id):
+    """
+    Vista para descargar el ticket PDF de una venta específica.
+    Solo accesible para administradores de supermercado.
+    """
+    try:
+        # Verificar que la venta pertenezca al supermercado del administrador
+        venta = get_object_or_404(Venta, id=venta_id, cajero=request.user)
+        
+        # Verificar que la venta esté completada
+        if venta.estado != 'COMPLETADA':
+            return Response(
+                {'error': 'Solo se pueden descargar tickets de ventas completadas.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Generar y devolver el PDF
+        response = generar_ticket_pdf_response(venta)
+        return response
+        
+    except Venta.DoesNotExist:
+        return Response(
+            {'error': 'Venta no encontrada o no tiene permisos para acceder a ella.'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Error al generar el PDF: {str(e)}'},
             status=status.HTTP_400_BAD_REQUEST
         )

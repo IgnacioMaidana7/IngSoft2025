@@ -839,6 +839,39 @@ export interface FinalizarVentaRequest {
   enviar_whatsapp?: boolean;
 }
 
+// === HISTORIAL DE VENTAS ===
+export interface HistorialVenta {
+  id: number;
+  numero_venta: string;
+  cajero_nombre: string;
+  empleado_cajero_nombre?: string;
+  cliente_telefono?: string;
+  fecha_creacion: string;
+  fecha_formateada: string;
+  total: string;
+  total_formateado: string;
+  estado: 'PENDIENTE' | 'PROCESANDO' | 'COMPLETADA' | 'CANCELADA';
+  ticket_pdf_generado: boolean;
+}
+
+export interface HistorialVentasResponse {
+  count: number;
+  num_pages: number;
+  current_page: number;
+  has_next: boolean;
+  has_previous: boolean;
+  results: HistorialVenta[];
+}
+
+export interface HistorialVentasFiltros {
+  estado?: string;
+  fecha_desde?: string;
+  fecha_hasta?: string;
+  cajero?: string;
+  page?: number;
+  page_size?: number;
+}
+
 // Crear nueva venta
 export async function crearVenta(data: CrearVentaRequest, token: string): Promise<Venta> {
   return apiFetch<Venta>('/api/ventas/ventas/', {
@@ -926,7 +959,7 @@ export async function buscarProductos(query: string, token: string): Promise<Pro
   });
 }
 
-// Descargar ticket PDF
+// Descargar ticket PDF (método existente)
 export async function descargarTicketPDF(ventaId: number, token: string): Promise<void> {
   try {
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'}/api/ventas/ventas/${ventaId}/descargar_ticket/`, {
@@ -953,6 +986,64 @@ export async function descargarTicketPDF(ventaId: number, token: string): Promis
     window.URL.revokeObjectURL(url);
   } catch (error) {
     console.error('Error descargando PDF:', error);
+    throw error;
+  }
+}
+
+// === FUNCIONES PARA HISTORIAL DE VENTAS ===
+
+// Obtener historial de ventas (solo para administradores)
+export async function obtenerHistorialVentas(
+  filtros: HistorialVentasFiltros = {},
+  token: string
+): Promise<HistorialVentasResponse> {
+  // Construir parámetros de consulta
+  const params = new URLSearchParams();
+  
+  if (filtros.estado) params.append('estado', filtros.estado);
+  if (filtros.fecha_desde) params.append('fecha_desde', filtros.fecha_desde);
+  if (filtros.fecha_hasta) params.append('fecha_hasta', filtros.fecha_hasta);
+  if (filtros.cajero) params.append('cajero', filtros.cajero);
+  if (filtros.page) params.append('page', filtros.page.toString());
+  if (filtros.page_size) params.append('page_size', filtros.page_size.toString());
+
+  const queryString = params.toString();
+  const url = `/api/ventas/historial/${queryString ? `?${queryString}` : ''}`;
+
+  return apiFetch<HistorialVentasResponse>(url, {
+    method: 'GET',
+    token
+  });
+}
+
+// Descargar ticket PDF específico del historial (solo para administradores)
+export async function descargarTicketHistorial(ventaId: number, token: string): Promise<void> {
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'}/api/ventas/ticket/${ventaId}/pdf/`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Error al descargar PDF: ${response.status}`);
+    }
+
+    // Crear blob y descargar archivo
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `ticket_${ventaId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Error descargando PDF del historial:', error);
     throw error;
   }
 }
