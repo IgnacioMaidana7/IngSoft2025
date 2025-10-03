@@ -52,3 +52,15 @@ h3 { font-size: 1.25rem; line-height: 1.75rem; font-weight: 700; }
 .shadow-soft { box-shadow: 0 8px 30px rgba(0,0,0,0.08); }
 .shadow-glow { box-shadow: 0 10px 25px rgba(200,163,132,0.35); }
 
+/* Camera specific styles for better stability */
+video {
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Prevent layout shifts in camera modal */
+.camera-container {
+  contain: layout style;
+}
+

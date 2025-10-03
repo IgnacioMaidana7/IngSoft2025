@@ -6,6 +6,7 @@ import { useToast } from "@/components/feedback/ToastProvider";
 import Container from "@/components/layout/Container";
 import Card from "@/components/layout/Card";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import CameraModal from "@/components/CameraModal";
 import { useAuth } from "@/context/AuthContext";
 import {
 	crearVenta,
@@ -31,6 +32,7 @@ export default function VentasPage() {
 	const [cargando, setCargando] = useState(false);
 	const [isModalVisible, setModalVisible] = useState(false);
 	const [cantidadEditando, setCantidadEditando] = useState<{ [key: number]: number }>({});
+	const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
 	
 	const { showToast } = useToast();
 	const { token } = useAuth();
@@ -197,6 +199,13 @@ export default function VentasPage() {
 		setMostrarProductos(false);
 	};
 
+	const handlePhotoUploaded = (result: { id: string; url: string }) => {
+		// La foto ha sido guardada exitosamente
+		// Por ahora solo mostramos un mensaje, más adelante aquí se implementará
+		// la lógica de reconocimiento de productos
+		console.log('Foto guardada:', result);
+	};
+
 	const enviarWhatsApp = () => {
 		if (phoneNumber && ventaActual) {
 			const mensaje = encodeURIComponent(
@@ -257,23 +266,28 @@ export default function VentasPage() {
 					{/* Búsqueda y selección de productos */}
 					<div className="px-4">
 						<div className="mb-3">
-							<div className="flex gap-2">
-								<input
-									className="flex-1 px-3 py-2 border border-border rounded-lg"
-									placeholder="Buscar productos..."
-									value={busquedaProducto}
-									onChange={(e) => setBusquedaProducto(e.target.value)}
-									onFocus={() => setMostrarProductos(true)}
-								/>
-								<Button 
-									onClick={() => setMostrarProductos(!mostrarProductos)}
-									variant="secondary"
-								>
-									{mostrarProductos ? "Ocultar" : "Mostrar"}
-								</Button>
-							</div>
-
-							{/* Lista de productos */}
+					<div className="flex gap-2">
+						<input
+							className="flex-1 px-3 py-2 border border-border rounded-lg"
+							placeholder="Buscar productos..."
+							value={busquedaProducto}
+							onChange={(e) => setBusquedaProducto(e.target.value)}
+							onFocus={() => setMostrarProductos(true)}
+						/>
+						<Button 
+							onClick={() => setIsCameraModalOpen(true)}
+							variant="secondary"
+							title="Capturar productos con cámara"
+						>
+							📸
+						</Button>
+						<Button 
+							onClick={() => setMostrarProductos(!mostrarProductos)}
+							variant="secondary"
+						>
+							{mostrarProductos ? "Ocultar" : "Mostrar"}
+						</Button>
+					</div>							{/* Lista de productos */}
 							{mostrarProductos && (
 								<div className="mt-2 border border-border rounded-lg max-h-60 overflow-y-auto bg-white">
 									{cargando ? (
@@ -453,6 +467,13 @@ export default function VentasPage() {
 					</div>
 				</div>
 			)}
+
+			{/* Modal de Cámara */}
+			<CameraModal 
+				isOpen={isCameraModalOpen}
+				onClose={() => setIsCameraModalOpen(false)}
+				onPhotoUploaded={handlePhotoUploaded}
+			/>
 		</ProtectedRoute>
 	);
 }
