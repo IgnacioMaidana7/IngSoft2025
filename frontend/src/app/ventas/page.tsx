@@ -18,8 +18,10 @@ import {
 	obtenerProductosDisponibles,
 	buscarProductos,
 	descargarTicketPDF,
+	reconocerProductosImagen,
 	type Venta,
-	type ProductoDisponible
+	type ProductoDisponible,
+	type ProductoReconocido
 } from "@/lib/api";
 
 export default function VentasPage() {
@@ -33,6 +35,12 @@ export default function VentasPage() {
 	const [isModalVisible, setModalVisible] = useState(false);
 	const [cantidadEditando, setCantidadEditando] = useState<{ [key: number]: number }>({});
 	const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+	
+	// Estados para reconocimiento de productos
+	const [reconociendo, setReconociendo] = useState(false);
+	const [productosDetectados, setProductosDetectados] = useState<ProductoReconocido[]>([]);
+	const [mostrarProductosDetectados, setMostrarProductosDetectados] = useState(false);
+	const [cantidadesDetectados, setCantidadesDetectados] = useState<{ [key: number]: number }>({});
 	
 	const { showToast } = useToast();
 	const { token } = useAuth();
@@ -199,11 +207,144 @@ export default function VentasPage() {
 		setMostrarProductos(false);
 	};
 
-	const handlePhotoUploaded = (result: { id: string; url: string }) => {
-		// La foto ha sido guardada exitosamente
-		// Por ahora solo mostramos un mensaje, más adelante aquí se implementará
-		// la lógica de reconocimiento de productos
-		console.log('Foto guardada:', result);
+	const handlePhotoUploaded = async (result: { id: string; url: string }) => {
+		if (!token) {
+			showToast("No hay sesión activa", "error");
+			return;
+		}
+		
+		try {
+			setReconociendo(true);
+			setIsCameraModalOpen(false);
+			showToast("🔍 Analizando imagen...", "info");
+			
+			// Obtener el archivo de la foto capturada
+			const response = await fetch(result.url);
+			const blob = await response.blob();
+			const file = new File([blob], 'captura.jpg', { type: 'image/jpeg' });
+			
+			// Enviar a la API de reconocimiento
+			const resultadoReconocimiento = await reconocerProductosImagen(file, token);
+			
+			if (resultadoReconocimiento.success && resultadoReconocimiento.productos.length > 0) {
+				// Filtrar solo productos que existen en la BD
+				const productosValidos = resultadoReconocimiento.productos.filter(
+					p => p.existe_en_bd && p.ingsoft_product_id
+				);
+				
+				if (productosValidos.length === 0) {
+					showToast(
+						"No se detectaron productos registrados en el sistema",
+						"info"
+					);
+					setReconociendo(false);
+					return;
+				}
+				
+				// Inicializar cantidades en 1 para cada producto detectado
+				const cantidadesIniciales: { [key: number]: number } = {};
+				productosValidos.forEach(producto => {
+					if (producto.ingsoft_product_id) {
+						cantidadesIniciales[producto.ingsoft_product_id] = 1;
+					}
+				});
+				
+				setProductosDetectados(productosValidos);
+				setCantidadesDetectados(cantidadesIniciales);
+				setMostrarProductosDetectados(true);
+				
+				showToast(
+					`✅ Se detectaron ${productosValidos.length} producto(s)`,
+					"success"
+				);
+			} else {
+				showToast(
+					resultadoReconocimiento.error || "No se detectaron productos en la imagen",
+					"info"
+				);
+			}
+		} catch (error: any) {
+			console.error('Error en reconocimiento:', error);
+			showToast(
+				error.message || "Error al reconocer productos. Verifica que la API esté corriendo.",
+				"error"
+			);
+		} finally {
+			setReconociendo(false);
+		}
+	};
+
+	const confirmarProductosDetectados = async () => {
+		if (!ventaActual && token) {
+			// Si no hay venta activa, crear una nueva
+			await iniciarNuevaVenta();
+		}
+		
+		if (!token) return;
+		
+		try {
+			setCargando(true);
+			let productosAgregados = 0;
+			
+			for (const productoDetectado of productosDetectados) {
+				if (productoDetectado.ingsoft_product_id) {
+					const cantidad = cantidadesDetectados[productoDetectado.ingsoft_product_id] || 1;
+					
+					// Buscar el producto en la lista de disponibles
+					const productoDisponible = productosDisponibles.find(
+						p => p.id === productoDetectado.ingsoft_product_id
+					);
+					
+					if (productoDisponible && ventaActual) {
+						try {
+							const resultado = await agregarProductoAVenta(
+								ventaActual.id,
+								{ 
+									producto_id: productoDetectado.ingsoft_product_id, 
+									cantidad 
+								},
+								token
+							);
+							setVentaActual(resultado.venta);
+							productosAgregados++;
+						} catch (error) {
+							console.error(`Error agregando ${productoDetectado.nombre_db}:`, error);
+						}
+					}
+				}
+			}
+			
+			if (productosAgregados > 0) {
+				showToast(
+					`${productosAgregados} producto(s) agregado(s) al ticket`,
+					"success"
+				);
+			}
+			
+			// Limpiar estado de detección
+			setMostrarProductosDetectados(false);
+			setProductosDetectados([]);
+			setCantidadesDetectados({});
+		} catch (error: any) {
+			showToast(error.message || "Error al agregar productos", "error");
+		} finally {
+			setCargando(false);
+		}
+	};
+
+	const cancelarProductosDetectados = () => {
+		setMostrarProductosDetectados(false);
+		setProductosDetectados([]);
+		setCantidadesDetectados({});
+		showToast("Detección cancelada", "info");
+	};
+
+	const actualizarCantidadDetectado = (productoId: number, nuevaCantidad: number) => {
+		if (nuevaCantidad < 1) return;
+		setCantidadesDetectados(prev => ({
+			...prev,
+			[productoId]: nuevaCantidad
+		}));
 	};
 
 	const enviarWhatsApp = () => {
@@ -266,28 +407,30 @@ export default function VentasPage() {
 					{/* Búsqueda y selección de productos */}
 					<div className="px-4">
 						<div className="mb-3">
-					<div className="flex gap-2">
-						<input
-							className="flex-1 px-3 py-2 border border-border rounded-lg"
-							placeholder="Buscar productos..."
-							value={busquedaProducto}
-							onChange={(e) => setBusquedaProducto(e.target.value)}
-							onFocus={() => setMostrarProductos(true)}
-						/>
-						<Button 
-							onClick={() => setIsCameraModalOpen(true)}
-							variant="secondary"
-							title="Capturar productos con cámara"
-						>
-							📸
-						</Button>
-						<Button 
-							onClick={() => setMostrarProductos(!mostrarProductos)}
-							variant="secondary"
-						>
-							{mostrarProductos ? "Ocultar" : "Mostrar"}
-						</Button>
-					</div>							{/* Lista de productos */}
+							<div className="flex gap-2">
+								<input
+									className="flex-1 px-3 py-2 border border-border rounded-lg"
+									placeholder="Buscar productos..."
+									value={busquedaProducto}
+									onChange={(e) => setBusquedaProducto(e.target.value)}
+									onFocus={() => setMostrarProductos(true)}
+								/>
+								<Button 
+									onClick={() => setIsCameraModalOpen(true)}
+									variant="secondary"
+									title="Capturar productos con cámara"
+									disabled={reconociendo || cargando}
+									className="min-w-[48px]"
+								>
+									📸
+								</Button>
+								<Button 
+									onClick={() => setMostrarProductos(!mostrarProductos)}
+									variant="secondary"
+								>
+									{mostrarProductos ? "Ocultar" : "Mostrar"}
+								</Button>
+							</div>							{/* Lista de productos */}
 							{mostrarProductos && (
 								<div className="mt-2 border border-border rounded-lg max-h-60 overflow-y-auto bg-white">
 									{cargando ? (
@@ -474,6 +617,137 @@ export default function VentasPage() {
 				onClose={() => setIsCameraModalOpen(false)}
 				onPhotoUploaded={handlePhotoUploaded}
 			/>
+
+			{/* Modal de Reconocimiento en Proceso */}
+			{reconociendo && (
+				<div className="fixed inset-0 bg-black/70 grid place-items-center z-50">
+					<div className="bg-white rounded-2xl p-8 w-[360px] max-w-[90%] text-center">
+						<div className="mb-4">
+							<div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+						</div>
+						<h3 className="font-bold text-lg mb-2">Analizando imagen...</h3>
+						<p className="text-gray-600">
+							Detectando productos en la fotografía
+						</p>
+					</div>
+				</div>
+			)}
+
+			{/* Modal de Productos Detectados */}
+			{mostrarProductosDetectados && (
+				<div className="fixed inset-0 bg-black/50 grid place-items-center z-50 p-4 overflow-y-auto">
+					<div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+						<h3 className="font-bold text-xl mb-4 text-center">
+							🎯 Productos Detectados
+						</h3>
+						<p className="text-center text-gray-600 mb-4">
+							Se detectaron {productosDetectados.length} producto(s). 
+							Ajusta las cantidades y confirma para agregarlos al ticket.
+						</p>
+
+						<div className="space-y-3 mb-6">
+							{productosDetectados.map((producto) => {
+								const productoId = producto.ingsoft_product_id!;
+								const cantidad = cantidadesDetectados[productoId] || 1;
+								
+								return (
+									<div key={productoId} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+										<div className="flex items-start justify-between mb-3">
+											<div className="flex-1">
+												<div className="font-bold text-lg">{producto.nombre_db}</div>
+												<div className="text-sm text-gray-600">
+													{producto.categoria_db}
+												</div>
+												<div className="text-sm font-semibold text-green-600 mt-1">
+													Precio: ${producto.precio_db}
+												</div>
+												{producto.stock_disponible !== undefined && (
+													<div className={`text-xs mt-1 ${
+														producto.stock_bajo ? 'text-orange-600' : 'text-blue-600'
+													}`}>
+														Stock disponible: {producto.stock_disponible} unidades
+														{producto.stock_bajo && ' (⚠️ Stock bajo)'}
+													</div>
+												)}
+											</div>
+											
+											<div className="ml-4">
+												<div className="text-xs text-gray-500 mb-1">Confianza</div>
+												<div className="text-sm font-medium">
+													{Math.round(producto.classification_confidence * 100)}%
+												</div>
+											</div>
+										</div>
+
+										{/* Control de cantidad */}
+										<div className="flex items-center justify-between bg-white rounded-lg p-2 border border-gray-300">
+											<span className="text-sm font-medium">Cantidad:</span>
+											<div className="flex items-center gap-3">
+												<button
+													className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold hover:bg-red-200 transition-colors"
+													onClick={() => actualizarCantidadDetectado(productoId, cantidad - 1)}
+												>
+													-
+												</button>
+												<span className="w-12 text-center font-bold text-lg">
+													{cantidad}
+												</span>
+												<button
+													className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center font-bold hover:bg-green-200 transition-colors"
+													onClick={() => actualizarCantidadDetectado(productoId, cantidad + 1)}
+													disabled={producto.stock_disponible !== undefined && cantidad >= producto.stock_disponible}
+												>
+													+
+												</button>
+											</div>
+										</div>
+
+										{/* Subtotal */}
+										<div className="mt-2 text-right">
+											<span className="text-sm text-gray-600">Subtotal: </span>
+											<span className="font-bold text-lg text-primary">
+												${(parseFloat(producto.precio_db || '0') * cantidad).toFixed(2)}
+											</span>
+										</div>
+									</div>
+								);
+							})}
+						</div>
+
+						{/* Total de productos detectados */}
+						<div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+							<div className="flex justify-between items-center">
+								<span className="font-semibold text-lg">Total a agregar:</span>
+								<span className="font-bold text-2xl text-primary">
+									${productosDetectados.reduce((sum, p) => {
+										const cantidad = cantidadesDetectados[p.ingsoft_product_id!] || 1;
+										return sum + (parseFloat(p.precio_db || '0') * cantidad);
+									}, 0).toFixed(2)}
+								</span>
+							</div>
+						</div>
+
+						{/* Botones de acción */}
+						<div className="flex gap-3">
+							<Button 
+								variant="secondary" 
+								onClick={cancelarProductosDetectados}
+								className="flex-1"
+								disabled={cargando}
+							>
+								Cancelar
+							</Button>
+							<Button 
+								onClick={confirmarProductosDetectados}
+								className="flex-1"
+								disabled={cargando}
+							>
+								{cargando ? "Agregando..." : "Confirmar y Agregar"}
+							</Button>
+						</div>
+					</div>
+				</div>
+			)}
 		</ProtectedRoute>
 	);
 }

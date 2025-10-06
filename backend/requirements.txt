@@ -32,3 +32,6 @@ django-filter==23.2
 
 # PDF generation
 reportlab==4.0.4
+
+# HTTP requests to external APIs
+requests>=2.31.0

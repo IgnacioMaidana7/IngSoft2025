@@ -1047,3 +1047,74 @@ export async function descargarTicketHistorial(ventaId: number, token: string): 
     throw error;
   }
 }
+
+// === RECONOCIMIENTO DE PRODUCTOS ===
+export interface ProductoReconocido {
+  product_id: number;
+  ingsoft_product_id: number | null;
+  name: string;
+  display_name: string;
+  category: string;
+  brand: string;
+  detection_confidence: number;
+  classification_confidence: number;
+  bbox: {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    width: number;
+    height: number;
+  };
+  // Información enriquecida desde la BD
+  nombre_db?: string;
+  categoria_db?: string;
+  precio_db?: string;
+  existe_en_bd?: boolean;
+  stock_disponible?: number;
+  stock_minimo?: number;
+  stock_bajo?: boolean;
+  mensaje?: string;
+}
+
+export interface RecognitionResponse {
+  success: boolean;
+  total_productos: number;
+  productos: ProductoReconocido[];
+  processing_time_ms: number;
+  deposito_id?: number;
+  error?: string;
+  stock_suggestions?: any[];
+}
+
+// Reconocer productos desde una imagen
+export async function reconocerProductosImagen(
+  imageFile: File,
+  token: string
+): Promise<RecognitionResponse> {
+  const formData = new FormData();
+  formData.append('image', imageFile);
+  
+  return apiFetch<RecognitionResponse>('/api/productos/reconocer-imagen/', {
+    method: 'POST',
+    body: formData,
+    token,
+    isMultipart: true
+  });
+}
+
+// Verificar estado de la API de reconocimiento
+export async function verificarApiReconocimiento(token: string): Promise<{ success: boolean; status: string; details?: any; error?: string }> {
+  return apiFetch<{ success: boolean; status: string; details?: any; error?: string }>('/api/productos/verificar-api-reconocimiento/', {
+    method: 'GET',
+    token
+  });
+}
+
+// Obtener catálogo de productos reconocibles
+export async function obtenerCatalogoReconocimiento(token: string): Promise<any> {
+  return apiFetch<any>('/api/productos/catalogo-reconocimiento/', {
+    method: 'GET',
+    token
+  });
+}
