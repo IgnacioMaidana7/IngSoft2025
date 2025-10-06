@@ -39,9 +39,17 @@ export async function apiFetch<TResponse>(
 
   if (!response.ok) {
     let errorMessage = `HTTP ${response.status}`;
+    let errorDetails = null;
     
     try {
       const errorData = await response.json();
+      console.error('🔴 Error de API:', {
+        status: response.status,
+        statusText: response.statusText,
+        data: errorData
+      });
+      
+      errorDetails = errorData;
       
       // Si es un error de validación de Django (400), extraer los mensajes
       if (response.status === 400 && errorData) {
@@ -62,17 +70,37 @@ export async function apiFetch<TResponse>(
           errorMessage = errorData.detail;
         } else if (errorData.message) {
           errorMessage = errorData.message;
+        } else if (errorData.error) {
+          errorMessage = errorData.error;
+        }
+      } else if (errorData.error) {
+        errorMessage = errorData.error;
+        // Agregar detalles si existen
+        if (errorData.details) {
+          errorMessage += `\nDetalles: ${errorData.details}`;
         }
       } else if (errorData.detail) {
         errorMessage = errorData.detail;
       } else if (errorData.message) {
         errorMessage = errorData.message;
       }
-    } catch {
-      // Si no se puede parsear JSON, usar el status por defecto
+    } catch (parseError) {
+      // Si no se puede parsear JSON, intentar obtener texto plano
+      console.error('⚠️ No se pudo parsear respuesta de error como JSON');
+      try {
+        const textError = await response.text();
+        if (textError) {
+          console.error('Respuesta de error (texto):', textError.substring(0, 500));
+          errorMessage = `HTTP ${response.status}: ${textError.substring(0, 200)}`;
+        }
+      } catch {
+        // Usar el status por defecto
+      }
     }
     
-    throw new Error(errorMessage);
+    const error = new Error(errorMessage) as Error & { details?: any };
+    error.details = errorDetails;
+    throw error;
   }
 
   const contentType = response.headers.get("content-type") ?? "";
@@ -146,14 +174,38 @@ export async function downloadFile(
   return response.blob();
 }
 
+// Interfaces para el reconocimiento de productos
+export interface ProductoDetectado {
+  ingsoft_product_id?: number;
+  nombre?: string;
+  confidence?: number;
+  bounding_box?: number[];
+  nombre_db?: string;
+  categoria_db?: string;
+  precio_db?: string;
+  existe_en_bd?: boolean;
+  stock_disponible?: number;
+  stock_minimo?: number;
+  stock_bajo?: boolean;
+  mensaje?: string;
+}
+
+export interface ReconocimientoResponse {
+  success: boolean;
+  productos?: ProductoDetectado[];
+  error?: string;
+  details?: string;
+  stock_suggestions?: ProductoDetectado[];
+}
+
 export async function uploadPhoto(
   file: File,
   token?: string | null
-): Promise<{ id: string; url: string }>
+): Promise<ReconocimientoResponse>
 {
   const formData = new FormData();
-  formData.append("file", file);
-  return apiFetch("/api/photos/", { method: "POST", body: formData, token: token ?? null, isMultipart: true });
+  formData.append("image", file); // El endpoint espera 'image', no 'file'
+  return apiFetch<ReconocimientoResponse>("/api/productos/reconocer-imagen/", { method: "POST", body: formData, token: token ?? null, isMultipart: true });
 }
 
 // Funciones de autenticación para supermercados

@@ -207,7 +207,7 @@ export default function VentasPage() {
 		setMostrarProductos(false);
 	};
 
-	const handlePhotoUploaded = async (result: { id: string; url: string }) => {
+	const handlePhotoUploaded = async (captureData: { blob: Blob; dataUrl: string }) => {
 		if (!token) {
 			showToast("No hay sesión activa", "error");
 			return;
@@ -218,13 +218,27 @@ export default function VentasPage() {
 			setIsCameraModalOpen(false);
 			showToast("🔍 Analizando imagen...", "info");
 			
-			// Obtener el archivo de la foto capturada
-			const response = await fetch(result.url);
-			const blob = await response.blob();
-			const file = new File([blob], 'captura.jpg', { type: 'image/jpeg' });
+			console.log("📸 Imagen capturada:", {
+				size: captureData.blob.size,
+				type: captureData.blob.type
+			});
+			
+			// Crear archivo desde el blob
+			const file = new File([captureData.blob], 'captura.jpg', { 
+				type: captureData.blob.type || 'image/jpeg',
+				lastModified: Date.now()
+			});
+			
+			console.log("📁 Archivo creado:", {
+				name: file.name,
+				size: file.size,
+				type: file.type
+			});
 			
 			// Enviar a la API de reconocimiento
+			console.log("🚀 Enviando imagen a la API de reconocimiento...");
 			const resultadoReconocimiento = await reconocerProductosImagen(file, token);
+			console.log("📡 Respuesta recibida:", resultadoReconocimiento);
 			
 			if (resultadoReconocimiento.success && resultadoReconocimiento.productos.length > 0) {
 				// Filtrar solo productos que existen en la BD
@@ -264,11 +278,27 @@ export default function VentasPage() {
 				);
 			}
 		} catch (error: any) {
-			console.error('Error en reconocimiento:', error);
-			showToast(
-				error.message || "Error al reconocer productos. Verifica que la API esté corriendo.",
-				"error"
-			);
+			console.error('❌ Error en reconocimiento de productos:');
+			console.error('  - Mensaje:', error.message);
+			console.error('  - Error completo:', error);
+			
+			// Intentar extraer más información del error
+			let errorMessage = "Error al reconocer productos";
+			
+			if (error.message) {
+				// Si el error viene de apiFetch, incluye el mensaje del servidor
+				if (error.message.includes("HTTP 500")) {
+					errorMessage = "Error del servidor al procesar la imagen. Verifica los logs del backend.";
+				} else if (error.message.includes("HTTP 503") || error.message.includes("HTTP 504")) {
+					errorMessage = "El servidor de reconocimiento no está disponible. Verifica que esté corriendo en puerto 8080.";
+				} else if (error.message.includes("HTTP 400")) {
+					errorMessage = "Error en los datos enviados. Verifica el formato de la imagen.";
+				} else {
+					errorMessage = error.message;
+				}
+			}
+			
+			showToast(errorMessage, "error");
 		} finally {
 			setReconociendo(false);
 		}
@@ -615,7 +645,7 @@ export default function VentasPage() {
 			<CameraModal 
 				isOpen={isCameraModalOpen}
 				onClose={() => setIsCameraModalOpen(false)}
-				onPhotoUploaded={handlePhotoUploaded}
+				onPhotoCapture={handlePhotoUploaded}
 			/>
 
 			{/* Modal de Reconocimiento en Proceso */}

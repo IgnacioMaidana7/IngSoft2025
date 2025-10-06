@@ -1,16 +1,19 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { uploadPhoto } from "@/lib/api";
-import { useAuth } from "@/context/AuthContext";
 
-export default function CameraCapture({ onUploaded }: { onUploaded?: (result: { id: string; url: string }) => void }) {
+// Tipo para el resultado de captura (retorna el blob directamente)
+type CaptureResult = {
+  blob: Blob;
+  dataUrl: string;
+};
+
+export default function CameraCapture({ onUploaded }: { onUploaded?: (result: CaptureResult) => void }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [cameraState, setCameraState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
-  const { token } = useAuth();
 
   const stopStream = useCallback(() => {
     if (streamRef.current) {
@@ -25,6 +28,9 @@ export default function CameraCapture({ onUploaded }: { onUploaded?: (result: { 
     try {
       setCameraState('loading');
       setError(null);
+
+      // Detener stream anterior si existe
+      stopStream();
 
       // Verificar si getUserMedia está disponible
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -49,43 +55,57 @@ export default function CameraCapture({ onUploaded }: { onUploaded?: (result: { 
       streamRef.current = stream;
 
       if (videoRef.current && stream) {
-        videoRef.current.srcObject = stream;
+        const video = videoRef.current;
+        
+        // Pausar el video antes de cambiar el src
+        video.pause();
+        video.srcObject = stream;
         
         // Esperar a que el video esté listo
         const waitForVideo = new Promise<void>((resolve, reject) => {
-          const video = videoRef.current;
           if (!video) {
             reject(new Error('Referencia de video perdida'));
             return;
           }
 
-          const onLoadedData = () => {
-            console.log('Video cargado, dimensiones:', video.videoWidth, 'x', video.videoHeight);
-            video.removeEventListener('loadeddata', onLoadedData);
-            video.removeEventListener('error', onError);
-            resolve();
+          const onCanPlay = async () => {
+            try {
+              console.log('Video puede reproducirse');
+              video.removeEventListener('canplay', onCanPlay);
+              video.removeEventListener('error', onError);
+              
+              // Intentar reproducir con manejo de errores
+              const playPromise = video.play();
+              if (playPromise !== undefined) {
+                await playPromise;
+              }
+              
+              console.log('Video reproduciendo, dimensiones:', video.videoWidth, 'x', video.videoHeight);
+              resolve();
+            } catch (playError) {
+              console.error('Error al reproducir video:', playError);
+              reject(new Error('Error al reproducir el video'));
+            }
           };
 
           const onError = (e: Event) => {
             console.error('Error en video:', e);
-            video.removeEventListener('loadeddata', onLoadedData);
+            video.removeEventListener('canplay', onCanPlay);
             video.removeEventListener('error', onError);
             reject(new Error('Error al cargar el video'));
           };
 
-          video.addEventListener('loadeddata', onLoadedData);
+          video.addEventListener('canplay', onCanPlay);
           video.addEventListener('error', onError);
           
           // Timeout de seguridad
           setTimeout(() => {
-            video.removeEventListener('loadeddata', onLoadedData);
+            video.removeEventListener('canplay', onCanPlay);
             video.removeEventListener('error', onError);
             reject(new Error('Timeout al inicializar la cámara'));
-          }, 10000);
+          }, 15000);
         });
 
-        // Reproducir el video
-        await videoRef.current.play();
         await waitForVideo;
         
         setCameraState('ready');
@@ -122,10 +142,13 @@ export default function CameraCapture({ onUploaded }: { onUploaded?: (result: { 
 
   useEffect(() => {
     let mounted = true;
+    let initPromise: Promise<void> | null = null;
     
     const init = async () => {
-      if (mounted) {
-        await initializeCamera();
+      if (mounted && !initPromise) {
+        initPromise = initializeCamera();
+        await initPromise;
+        initPromise = null;
       }
     };
     
@@ -135,7 +158,7 @@ export default function CameraCapture({ onUploaded }: { onUploaded?: (result: { 
       mounted = false;
       stopStream();
     };
-  }, [initializeCamera, stopStream]);
+  }, []); // Remover dependencias para evitar re-inicializaciones
 
   const capture = useCallback(async () => {
     if (cameraState !== 'ready' || isCapturing) return;
@@ -170,21 +193,23 @@ export default function CameraCapture({ onUploaded }: { onUploaded?: (result: { 
       
       // Convertir a blob
       const blob = await new Promise<Blob | null>((resolve) => {
-        canvas.toBlob(resolve, 'image/jpeg', 0.92);
+        canvas.toBlob(resolve, 'image/jpeg', 0.95); // Calidad alta
       });
       
       if (!blob) {
         throw new Error('No se pudo crear la imagen');
       }
       
-      // Crear archivo y subir
-      const file = new File([blob], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' });
-      console.log('Subiendo foto:', file.size, 'bytes');
+      console.log('Imagen capturada:', {
+        size: blob.size,
+        type: blob.type
+      });
       
-      const result = await uploadPhoto(file, token);
-      console.log('Foto subida exitosamente:', result);
+      // Crear data URL para preview (opcional)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
       
-      onUploaded?.(result);
+      // Devolver el blob para que el componente padre lo procese
+      onUploaded?.({ blob, dataUrl });
       
     } catch (err) {
       console.error('Error capturando foto:', err);
@@ -192,10 +217,16 @@ export default function CameraCapture({ onUploaded }: { onUploaded?: (result: { 
     } finally {
       setIsCapturing(false);
     }
-  }, [cameraState, isCapturing, token, onUploaded]);
+  }, [cameraState, isCapturing, onUploaded]);
 
-  const retryCamera = useCallback(() => {
-    initializeCamera();
+  const retryCamera = useCallback(async () => {
+    try {
+      setCameraState('loading');
+      setError(null);
+      await initializeCamera();
+    } catch (err) {
+      console.error('Error en retry:', err);
+    }
   }, [initializeCamera]);
 
   return (
@@ -233,7 +264,6 @@ export default function CameraCapture({ onUploaded }: { onUploaded?: (result: { 
           }`}
           playsInline
           muted
-          autoPlay
         />
       </div>
       
@@ -263,11 +293,19 @@ export default function CameraCapture({ onUploaded }: { onUploaded?: (result: { 
               const file = e.target.files?.[0];
               if (!file) return;
               try {
-                const result = await uploadPhoto(file, token);
-                onUploaded?.(result);
+                // Convertir archivo a blob y dataURL
+                const blob = file.slice(0, file.size, file.type);
+                const reader = new FileReader();
+                
+                reader.onload = (event) => {
+                  const dataUrl = event.target?.result as string;
+                  onUploaded?.({ blob, dataUrl });
+                };
+                
+                reader.readAsDataURL(file);
               } catch (err) {
-                console.error('Error subiendo archivo:', err);
-                setError('Error al subir el archivo');
+                console.error('Error procesando archivo:', err);
+                setError(err instanceof Error ? err.message : 'Error al procesar el archivo');
               }
             }}
           />
@@ -279,7 +317,10 @@ export default function CameraCapture({ onUploaded }: { onUploaded?: (result: { 
         <div className="text-xs text-gray-500 p-2 bg-gray-100 rounded">
           Estado: {cameraState}<br/>
           Stream: {streamRef.current ? 'Activo' : 'Inactivo'}<br/>
-          Video dims: {videoRef.current ? `${videoRef.current.videoWidth}x${videoRef.current.videoHeight}` : 'N/A'}
+          Stream tracks: {streamRef.current?.getTracks().length || 0}<br/>
+          Video dims: {videoRef.current ? `${videoRef.current.videoWidth}x${videoRef.current.videoHeight}` : 'N/A'}<br/>
+          Video ready: {videoRef.current?.readyState || 'N/A'}<br/>
+          Error: {error || 'Ninguno'}
         </div>
       )}
     </div>

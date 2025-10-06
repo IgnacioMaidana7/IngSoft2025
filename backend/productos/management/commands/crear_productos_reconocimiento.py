@@ -50,6 +50,16 @@ class Command(BaseCommand):
                 'categoria_nombre': 'Alimentos',
                 'api_name': 'pure_tomate_caja',
                 'sku': 'NOEL-TOMATE-520G'
+            },
+            {
+                'api_id': 6,
+                'nombre': 'Raid Insecticida 233g',
+                'descripcion': 'Raid Insecticida en aerosol de 233g - SKU: RAID-INSECT-233G',
+                'precio': 1450.00,
+                'stock': 25,
+                'categoria_nombre': 'Limpieza',
+                'api_name': 'raid_insecticida',
+                'sku': 'RAID-INSECT-233G'
             }
         ]
 
@@ -113,9 +123,12 @@ class Command(BaseCommand):
         """Actualiza el archivo product_mapping.json con los IDs de Django"""
         # Intentar encontrar el archivo product_mapping.json
         possible_paths = [
+            r'c:\Users\Usuario\Documents\GitHub\IngSoft2025\Reconocimiento-Productos\product_mapping.json',
             r'c:\Users\osval\Documents\GitHub\shelf-product-identifier\product_mapping.json',
             os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', 
-                        'shelf-product-identifier', 'product_mapping.json')
+                        'shelf-product-identifier', 'product_mapping.json'),
+            os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', 
+                        'Reconocimiento-Productos', 'product_mapping.json')
         ]
 
         mapping_file = None
