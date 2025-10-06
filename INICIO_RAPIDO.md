@@ -14,7 +14,7 @@ python manage.py runserver
 
 ### Terminal 2: API de Reconocimiento  
 ```powershell
-cd c:\Users\osval\Documents\GitHub\shelf-product-identifier
+cd c:\Users\Usuario\Documents\GitHub\IngSoft2025\Reconocimiento-Productos
 .\.venv\Scripts\Activate.ps1
 python server.py
 ```

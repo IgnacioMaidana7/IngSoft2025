@@ -59,7 +59,7 @@ class Command(BaseCommand):
                 'precio': 1450.00,
                 'stock': 0,
                 'categoria_nombre': 'Limpieza',
-                'api_name': 'raid_insecticida',
+                'api_name': 'raid',
                 'sku': 'RAID-INSECT-233G'
             }
         ]
