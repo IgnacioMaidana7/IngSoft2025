@@ -1,3 +1,7 @@
+# ============================================
+# PYTHON
+# ============================================
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -28,8 +32,6 @@ share/python-wheels/
 MANIFEST
 
 # PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
@@ -91,6 +93,8 @@ celerybeat-schedule
 
 # Environments
 .env
+.env.local
+.env.*.local
 .venv
 env/
 venv/
@@ -117,5 +121,240 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# ============================================
+# DJANGO ESPECÍFICO
+# ============================================
+
+# Base de datos
+*.sqlite3
+*.db
+db.sqlite3-journal
+
+# Media files (imágenes subidas por usuarios)
+backend/media/*
+!backend/media/.gitkeep
+
+# Static files (generados por collectstatic)
+backend/staticfiles/
+backend/static_root/
+
+# Migraciones (excepto __init__.py)
+# COMENTADO: Normalmente las migraciones SÍ se suben
+# **/migrations/*.py
+# !**/migrations/__init__.py
+
+# Logs de Django
+*.log
+*.pot
+
+# ============================================
+# NODE.JS / NEXT.JS / FRONTEND
+# ============================================
+
+# Dependencies
+node_modules/
+frontend/node_modules/
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Next.js
+frontend/.next/
+frontend/out/
+frontend/build
+
+# Production
+/build
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env files
+.env*.local
+
+# Vercel
+.vercel
+
+# Typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# ============================================
+# EDITORES / IDEs
+# ============================================
+
 # VSCode
 .vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+.idea_modules/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# ============================================
+# SISTEMA OPERATIVO
+# ============================================
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ============================================
+# ARCHIVOS TEMPORALES Y BACKUPS
+# ============================================
+
+# Archivos temporales
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
+*.backup
+*~
+*.orig
+
+# Archivos de bloqueo
+*.lock
+!package-lock.json
+!poetry.lock
+!Pipfile.lock
+
+# ============================================
+# PROYECTO ESPECÍFICO
+# ============================================
+
+# Archivos de configuración local
+backend/.env
+backend/.env.local
+backend/local_settings.py
+
+# Archivos de datos temporales
+backend/temp_uploads/
+backend/uploads/
+backend/tmp/
+
+# Archivos de testing
+backend/test_*.py
+!backend/**/test_*.py  # Excepto tests en apps
+
+# Archivos de desarrollo
+*.dev
+*.local
+scratch.py
+test_manual.py
+playground.py
+
+# Logs personalizados
+logs/
+*.log
+
+# Caché de pytest
+.pytest_cache/
+**/.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
+
+# Documentación generada
+docs/_build/
+docs/_static/
+docs/_templates/
+
+# ============================================
+# MODELOS DE ML / IA (SI APLICA)
+# ============================================
+
+# Modelos grandes (si usas Git LFS, descomentar)
+# *.h5
+# *.pkl
+# *.pth
+# *.onnx
+# *.pb
+# *.tflite
+
+# Datasets grandes
+# data/raw/
+# data/processed/
+# *.csv
+# *.parquet
+
+# ============================================
+# SEGURIDAD
+# ============================================
+
+# Claves y secretos
+*.pem
+*.key
+*.cert
+*.crt
+secrets.json
+credentials.json
+
+# Variables de entorno con datos sensibles
+.env
+.env.production
+.env.development
+.env.test
+
+# ============================================
+# ARCHIVOS GENERADOS
+# ============================================
+
+# Archivos compilados
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.dll
+*.exe
+
+# Archivos de salida
+output/
+dist/
+build/

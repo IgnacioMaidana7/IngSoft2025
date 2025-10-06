@@ -41,7 +41,24 @@ class ProductoSerializer(serializers.ModelSerializer):
         read_only_fields = ['fecha_creacion', 'fecha_modificacion']
     
     def get_stock_total(self, obj):
-        return sum(stock.cantidad for stock in obj.stocks.all())
+        """Calcula el stock total solo de los depósitos del usuario actual"""
+        request = self.context.get('request')
+        if not request or not hasattr(request, 'user'):
+            return 0
+        
+        user = request.user
+        
+        # Filtrar stocks solo de depósitos que pertenecen al usuario
+        if hasattr(user, 'supermercado'):
+            # Usuario EmpleadoUser - filtrar por supermercado
+            user_stocks = obj.stocks.filter(deposito__supermercado=user.supermercado)
+        elif hasattr(user, 'depositos'):
+            # Usuario Admin - filtrar por sus depósitos
+            user_stocks = obj.stocks.filter(deposito__supermercado=user)
+        else:
+            return 0
+        
+        return sum(stock.cantidad for stock in user_stocks)
 
 class ProductoListSerializer(serializers.ModelSerializer):
     """Serializer optimizado para listados"""
@@ -55,20 +72,44 @@ class ProductoListSerializer(serializers.ModelSerializer):
         fields = ['id', 'nombre', 'categoria_nombre', 'precio', 'activo',
                  'stock_total', 'depositos_count', 'stock_nivel', 'fecha_modificacion']
     
+    def _get_user_stocks(self, obj):
+        """Obtiene los stocks filtrados por el usuario actual"""
+        request = self.context.get('request')
+        if not request or not hasattr(request, 'user'):
+            return obj.stocks.none()
+        
+        user = request.user
+        
+        # Filtrar stocks solo de depósitos que pertenecen al usuario
+        if hasattr(user, 'supermercado'):
+            # Usuario EmpleadoUser - filtrar por supermercado
+            return obj.stocks.filter(deposito__supermercado=user.supermercado)
+        elif hasattr(user, 'depositos'):
+            # Usuario Admin - filtrar por sus depósitos
+            return obj.stocks.filter(deposito__supermercado=user)
+        else:
+            return obj.stocks.none()
+    
     def get_stock_total(self, obj):
-        return sum(stock.cantidad for stock in obj.stocks.all())
+        """Calcula el stock total solo de los depósitos del usuario actual"""
+        user_stocks = self._get_user_stocks(obj)
+        return sum(stock.cantidad for stock in user_stocks)
     
     def get_depositos_count(self, obj):
-        return obj.stocks.count()
+        """Cuenta solo los depósitos del usuario actual que tienen este producto"""
+        user_stocks = self._get_user_stocks(obj)
+        return user_stocks.count()
     
     def get_stock_nivel(self, obj):
-        """Determina el nivel de stock general del producto"""
-        total_stock = self.get_stock_total(obj)
+        """Determina el nivel de stock general del producto (solo depósitos del usuario)"""
+        user_stocks = self._get_user_stocks(obj)
+        total_stock = sum(stock.cantidad for stock in user_stocks)
+        
         if total_stock == 0:
             return 'sin-stock'
         
-        # Verificar si tiene stock bajo en algún depósito
-        for stock in obj.stocks.all():
+        # Verificar si tiene stock bajo en algún depósito del usuario
+        for stock in user_stocks:
             if stock.cantidad > 0 and stock.cantidad < stock.cantidad_minima:
                 return 'bajo'
         

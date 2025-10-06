@@ -20,13 +20,14 @@ class Command(BaseCommand):
         self.stdout.write(self.style.WARNING('🚀 Iniciando creación de productos para reconocimiento...'))
 
         # Productos a crear (basados en la API de reconocimiento)
+        # Nota: Se crean con stock 0, el stock se gestiona mediante movimientos de inventario
         productos_config = [
             {
                 'api_id': 5,
                 'nombre': 'Fritolim Aceite en Aerosol',
                 'descripcion': 'Aceite en aerosol Fritolim de 120g - SKU: FRITO-ACEIT-120ML',
                 'precio': 680.00,
-                'stock': 50,
+                'stock': 0,
                 'categoria_nombre': 'Alimentos',
                 'api_name': 'fritolim',
                 'sku': 'FRITO-ACEIT-120ML'
@@ -36,7 +37,7 @@ class Command(BaseCommand):
                 'nombre': 'Desodorante Nivea 150ml',
                 'descripcion': 'Desodorante Nivea en aerosol de 150ml - SKU: NIVEA-DEO-150ML',
                 'precio': 890.00,
-                'stock': 30,
+                'stock': 0,
                 'categoria_nombre': 'Cuidado Personal',
                 'api_name': 'desodorante_nivea',
                 'sku': 'NIVEA-DEO-150ML'
@@ -46,7 +47,7 @@ class Command(BaseCommand):
                 'nombre': 'Puré de Tomate Noel 530g',
                 'descripcion': 'Puré de tomate Noel de 530g - SKU: NOEL-TOMATE-520G',
                 'precio': 450.00,
-                'stock': 40,
+                'stock': 0,
                 'categoria_nombre': 'Alimentos',
                 'api_name': 'pure_tomate_caja',
                 'sku': 'NOEL-TOMATE-520G'
@@ -56,7 +57,7 @@ class Command(BaseCommand):
                 'nombre': 'Raid Insecticida 233g',
                 'descripcion': 'Raid Insecticida en aerosol de 233g - SKU: RAID-INSECT-233G',
                 'precio': 1450.00,
-                'stock': 25,
+                'stock': 0,
                 'categoria_nombre': 'Limpieza',
                 'api_name': 'raid_insecticida',
                 'sku': 'RAID-INSECT-233G'

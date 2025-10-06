@@ -124,11 +124,33 @@ class ProductoDetailView(generics.RetrieveUpdateDestroyAPIView):
             return ProductoCreateUpdateSerializer
         return ProductoSerializer
     
+    def retrieve(self, request, *args, **kwargs):
+        """Personalizar la respuesta para filtrar stocks del usuario"""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        data = serializer.data
+        
+        # Filtrar stocks solo del usuario actual
+        user = request.user
+        if hasattr(user, 'supermercado'):
+            # Usuario EmpleadoUser - filtrar por supermercado
+            user_stocks = instance.stocks.filter(deposito__supermercado=user.supermercado)
+        elif hasattr(user, 'depositos'):
+            # Usuario Admin - filtrar por sus depósitos
+            user_stocks = instance.stocks.filter(deposito__supermercado=user)
+        else:
+            user_stocks = instance.stocks.none()
+        
+        # Reemplazar los stocks en la respuesta con solo los del usuario
+        data['stocks'] = ProductoDepositoSerializer(user_stocks, many=True).data
+        
+        return Response(data)
+    
     def update(self, request, *args, **kwargs):
         # Usar ProductoCreateUpdateSerializer para validación
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
-        serializer = ProductoCreateUpdateSerializer(instance, data=request.data, partial=partial)
+        serializer = ProductoCreateUpdateSerializer(instance, data=request.data, partial=partial, context={'request': request})
         serializer.is_valid(raise_exception=True)
         
         # Guardar con el serializer de entrada
@@ -140,7 +162,7 @@ class ProductoDetailView(generics.RetrieveUpdateDestroyAPIView):
         
         # Recargar la instancia para obtener datos actualizados
         instance.refresh_from_db()
-        output_serializer = ProductoSerializer(instance)
+        output_serializer = ProductoSerializer(instance, context={'request': request})
         return Response(output_serializer.data)
 
     def get_object(self):
@@ -175,14 +197,20 @@ def gestionar_stock_producto(request, producto_id):
     
     if request.method == 'GET':
         stocks_qs = ProductoDeposito.objects.filter(producto=producto).select_related('deposito')
-        # Repos: solo ver su depósito
-        if isinstance(request.user, EmpleadoUser):
-            from empleados.models import Empleado
-            emp = Empleado.objects.filter(email=request.user.email, supermercado=request.user.supermercado).first()
+        
+        # Filtrar por usuario: solo mostrar stocks de sus depósitos
+        user = request.user
+        if isinstance(user, EmpleadoUser):
+            # Reponedor: solo su depósito
+            emp = Empleado.objects.filter(email=user.email, supermercado=user.supermercado).first()
             if emp:
                 stocks_qs = stocks_qs.filter(deposito=emp.deposito)
             else:
                 return Response({"detail": "Empleado sin depósito asignado"}, status=status.HTTP_403_FORBIDDEN)
+        elif hasattr(user, 'depositos'):
+            # Admin: solo sus depósitos
+            stocks_qs = stocks_qs.filter(deposito__supermercado=user)
+        
         stocks = stocks_qs
         serializer = ProductoDepositoSerializer(stocks, many=True)
         return Response(serializer.data)
