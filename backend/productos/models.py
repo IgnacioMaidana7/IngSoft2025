@@ -1,20 +1,27 @@
 from django.db import models
-from django.contrib.auth.models import User
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from inventario.models import Deposito
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from authentication.models import EmpleadoUser
 from notificaciones.models import Notificacion
+from decimal import Decimal
 
 class Categoria(models.Model):
-    nombre = models.CharField(max_length=100, unique=True)
+    nombre = models.CharField(max_length=100)
     descripcion = models.TextField(blank=True, null=True)
     activo = models.BooleanField(default=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
+    # Agregar relación con usuario - null=True para compatibilidad con categorías globales existentes
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='categorias_personalizadas', null=True, blank=True)
     
     class Meta:
         verbose_name = "Categoría"
         verbose_name_plural = "Categorías"
+        # Hacer que el nombre sea único por usuario (o globalmente si usuario es null)
+        unique_together = [['nombre', 'usuario']]
         
     def __str__(self):
         return self.nombre
@@ -22,7 +29,11 @@ class Categoria(models.Model):
 class Producto(models.Model):
     nombre = models.CharField(max_length=200)
     categoria = models.ForeignKey(Categoria, on_delete=models.CASCADE, related_name='productos')
-    precio = models.DecimalField(max_digits=10, decimal_places=2)
+    precio = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'), message='El precio debe ser mayor a 0')]
+    )
     descripcion = models.TextField(blank=True, null=True)
     activo = models.BooleanField(default=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
@@ -32,6 +43,17 @@ class Producto(models.Model):
         verbose_name = "Producto"
         verbose_name_plural = "Productos"
         ordering = ['nombre']
+        
+    def clean(self):
+        """Validación personalizada del modelo"""
+        super().clean()
+        if self.precio is not None and self.precio <= 0:
+            raise ValidationError({'precio': 'El precio debe ser mayor a 0'})
+        
+    def save(self, *args, **kwargs):
+        """Override save para ejecutar validaciones"""
+        self.full_clean()
+        super().save(*args, **kwargs)
         
     def __str__(self):
         return self.nombre

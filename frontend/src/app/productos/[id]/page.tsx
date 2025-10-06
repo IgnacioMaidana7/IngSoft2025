@@ -7,6 +7,7 @@ import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import Container from "@/components/layout/Container";
 import Card from "@/components/layout/Card";
+import SelectorCategorias from "@/components/productos/SelectorCategorias";
 import { 
   obtenerProducto,
   actualizarProducto,
@@ -126,6 +127,17 @@ export default function ProductoDetailPage() {
   const handleSaveProduct = async () => {
     if (!token || !producto) return;
     
+    // Validaciones
+    if (editedData.precio && Number(editedData.precio) <= 0) {
+      alert('El precio debe ser mayor a 0');
+      return;
+    }
+    
+    if (editedData.nombre && !editedData.nombre.trim()) {
+      alert('El nombre del producto es obligatorio');
+      return;
+    }
+    
     try {
       setSaving(true);
       const updatedProduct = await actualizarProducto(producto.id, editedData, token);
@@ -134,10 +146,18 @@ export default function ProductoDetailPage() {
       alert('Producto actualizado exitosamente');
     } catch (err: unknown) {
       console.error('Error actualizando producto:', err);
-      alert((err as Error).message || 'Error al actualizar producto');
+      const errorMessage = (err as any)?.response?.data?.precio?.[0] || 
+                          (err as any)?.response?.data?.detail ||
+                          (err as Error).message || 
+                          'Error al actualizar producto';
+      alert(errorMessage);
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleCategoriaCreada = (nuevaCategoria: CategoriaSimple) => {
+    setCategorias(prev => [...prev, nuevaCategoria]);
   };
 
   const handleGuardarTodoStock = async () => {
@@ -257,17 +277,13 @@ export default function ProductoDetailPage() {
                 
                 <div>
                   <label className="block text-sm font-medium text-text mb-2">Categoría</label>
-                  <select
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  <SelectorCategorias
+                    categorias={categorias}
                     value={editedData.categoria}
-                    onChange={(e) => setEditedData(prev => ({ ...prev, categoria: Number(e.target.value) }))}
-                  >
-                    {categorias.map((categoria) => (
-                      <option key={categoria.id} value={categoria.id}>
-                        {categoria.nombre}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(value) => setEditedData(prev => ({ ...prev, categoria: value }))}
+                    onCategoriaCreada={handleCategoriaCreada}
+                    placeholder="Seleccionar categoría"
+                  />
                 </div>
                 
                 <div>
@@ -275,6 +291,7 @@ export default function ProductoDetailPage() {
                   <Input
                     type="number"
                     step="0.01"
+                    min="0.01"
                     value={editedData.precio}
                     onChange={(e) => setEditedData(prev => ({ ...prev, precio: e.target.value }))}
                     placeholder="0.00"

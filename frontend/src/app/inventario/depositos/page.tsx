@@ -10,6 +10,7 @@ import { useToast } from "@/components/feedback/ToastProvider";
 import { 
   obtenerDepositos, 
   eliminarDeposito,
+  obtenerMiDeposito,
   Deposito,
   obtenerProductosPorDeposito,
   type ProductosPorDeposito
@@ -45,19 +46,39 @@ function DepositosPageContent() {
   const [stockLoading, setStockLoading] = useState(false);
   const [stockData, setStockData] = useState<ProductosPorDeposito | null>(null);
   const [stockError, setStockError] = useState<string | null>(null);
+  const [isReponedor, setIsReponedor] = useState(false);
+  const [miDeposito, setMiDeposito] = useState<Deposito | null>(null);
 
-  // Cargar depósitos
+  // Cargar depósitos y verificar tipo de usuario
   useEffect(() => {
     if (!token) return;
+    
+    // Verificar si es reponedor
+    const userType = localStorage.getItem('user_type');
+    const esReponedor = userType === 'empleado';
+    setIsReponedor(esReponedor);
     
     const cargarDepositos = async () => {
       try {
         setLoading(true);
         console.log('Cargando depósitos...');
+        
+        // Cargar todos los depósitos
         const depositosData = await obtenerDepositos(token);
         console.log('Datos recibidos:', depositosData);
-        console.log('Depósitos procesados:', depositosData);
         setDepositos(depositosData);
+        
+        // Si es reponedor, cargar también su depósito asignado
+        if (esReponedor) {
+          try {
+            const miDepositoData = await obtenerMiDeposito(token);
+            setMiDeposito(miDepositoData);
+            console.log('Mi depósito:', miDepositoData);
+          } catch (depositoError) {
+            console.warn('No se pudo cargar el depósito del reponedor:', depositoError);
+          }
+        }
+        
       } catch (error) {
         console.error('Error al cargar depósitos:', error);
         showToast(`Error al cargar depósitos: ${error}`, 'error');
@@ -113,11 +134,24 @@ function DepositosPageContent() {
     setStockError(null);
   };
 
-  // Filtrar depósitos por búsqueda
-  const depositosFiltrados = depositos?.filter(deposito =>
+  // Función para verificar si un depósito es el del reponedor logueado
+  const esMiDeposito = (deposito: Deposito): boolean => {
+    return isReponedor && miDeposito ? deposito.id === miDeposito.id : false;
+  };
+
+  // Filtrar y ordenar depósitos por búsqueda
+  const depositosFiltrados = (depositos?.filter(deposito =>
     deposito.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
     deposito.direccion.toLowerCase().includes(busqueda.toLowerCase())
-  ) || [];
+  ) || []).sort((a, b) => {
+    // Si es reponedor, mostrar su depósito primero
+    if (isReponedor && miDeposito) {
+      if (a.id === miDeposito.id) return -1;
+      if (b.id === miDeposito.id) return 1;
+    }
+    // Luego por nombre alfabéticamente
+    return a.nombre.localeCompare(b.nombre);
+  });
 
   if (loading) {
     return (
@@ -138,21 +172,32 @@ function DepositosPageContent() {
         <div className="flex items-center justify-between mb-6 pb-4 border-b border-border">
           <div>
             <h1 className="text-3xl font-bold text-text mb-1">Gestión de Depósitos</h1>
-            <p className="text-lightText">Administra las ubicaciones de almacenamiento</p>
+            <p className="text-lightText">
+              {isReponedor ? 'Consulta la información de los depósitos' : 'Administra las ubicaciones de almacenamiento'}
+            </p>
           </div>
-          <Button 
-            onClick={() => router.push('/inventario/depositos/nuevo')}
-            className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors"
-          >
-            + Nuevo Depósito
-          </Button>
+          {!isReponedor && (
+            <Button 
+              onClick={() => router.push('/inventario/depositos/nuevo')}
+              className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors"
+            >
+              + Nuevo Depósito
+            </Button>
+          )}
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="bg-gradient-to-r from-blue-50 to-blue-100 p-4 rounded-lg">
-            <div className="text-2xl font-bold text-blue-600">{depositos?.length || 0}</div>
-            <div className="text-sm text-blue-700">Total Depósitos</div>
+        <div className={`grid gap-4 mb-8 ${isReponedor && miDeposito ? 'grid-cols-1 md:grid-cols-4' : 'grid-cols-1 md:grid-cols-3'}`}>
+          {isReponedor && miDeposito && (
+            <div className="bg-gradient-to-r from-blue-100 to-blue-200 p-4 rounded-lg border border-blue-300 ring-1 ring-blue-200">
+              <div className="text-2xl font-bold text-blue-700">🏢</div>
+              <div className="text-sm text-blue-800 font-medium">Mi Depósito</div>
+              <div className="text-xs text-blue-700 mt-1">{miDeposito.nombre}</div>
+            </div>
+          )}
+          <div className="bg-gradient-to-r from-gray-50 to-gray-100 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-gray-600">{depositos?.length || 0}</div>
+            <div className="text-sm text-gray-700">Total Depósitos</div>
           </div>
           <div className="bg-gradient-to-r from-green-50 to-green-100 p-4 rounded-lg">
             <div className="text-2xl font-bold text-green-600">
@@ -196,11 +241,27 @@ function DepositosPageContent() {
         ) : (
           <div className="space-y-4">
             {depositosFiltrados.map((deposito) => (
-              <div key={deposito.id} className="border border-border rounded-lg p-4 hover:shadow-md transition-shadow">
+              <div 
+                key={deposito.id} 
+                className={`border rounded-lg p-4 hover:shadow-md transition-all ${
+                  esMiDeposito(deposito) 
+                    ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-300 ring-2 ring-blue-200' 
+                    : 'border-border hover:shadow-md'
+                }`}
+              >
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-semibold text-lg text-text">{deposito.nombre}</h3>
+                      <h3 className={`font-semibold text-lg ${
+                        esMiDeposito(deposito) ? 'text-blue-900' : 'text-text'
+                      }`}>
+                        {deposito.nombre}
+                        {esMiDeposito(deposito) && (
+                          <span className="ml-2 px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded-full">
+                            🏢 Mi Depósito
+                          </span>
+                        )}
+                      </h3>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         deposito.activo 
                           ? 'bg-green-100 text-green-800' 
@@ -230,19 +291,28 @@ function DepositosPageContent() {
                     >
                       Ver Stock
                     </Button>
-                    <Button 
-                      variant="ghost"
-                      onClick={() => router.push(`/inventario/depositos/${deposito.id}`)}
-                      className="text-primary hover:text-primary/80 px-3 py-1 border border-primary rounded hover:bg-primary/10 transition-colors"
-                    >
-                      Editar
-                    </Button>
-                    <button 
-                      onClick={() => handleEliminarDeposito(deposito.id, deposito.nombre)}
-                      className="text-red-600 hover:text-red-700 px-3 py-1 border border-red-600 rounded hover:bg-red-50 transition-colors"
-                    >
-                      Eliminar
-                    </button>
+                    {!isReponedor && (
+                      <>
+                        <Button 
+                          variant="ghost"
+                          onClick={() => router.push(`/inventario/depositos/${deposito.id}`)}
+                          className="text-primary hover:text-primary/80 px-3 py-1 border border-primary rounded hover:bg-primary/10 transition-colors"
+                        >
+                          Editar
+                        </Button>
+                        <button 
+                          onClick={() => handleEliminarDeposito(deposito.id, deposito.nombre)}
+                          className="text-red-600 hover:text-red-700 px-3 py-1 border border-red-600 rounded hover:bg-red-50 transition-colors"
+                        >
+                          Eliminar
+                        </button>
+                      </>
+                    )}
+                    {isReponedor && (
+                      <div className="text-sm text-gray-500 px-3 py-1">
+                        Solo consulta
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

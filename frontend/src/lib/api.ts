@@ -627,6 +627,14 @@ export async function crearCategoria(data: Omit<Categoria, 'id' | 'fecha_creacio
   });
 }
 
+export async function crearCategoriaPersonalizada(data: { nombre: string; descripcion?: string }, token: string): Promise<CategoriaSimple> {
+  return apiFetch<CategoriaSimple>('/api/productos/categorias/crear-personalizada/', {
+    method: 'POST',
+    body: data,
+    token
+  });
+}
+
 export async function actualizarCategoria(id: number, data: Partial<Categoria>, token: string): Promise<Categoria> {
   return apiFetch<Categoria>(`/api/productos/categorias/${id}/`, {
     method: 'PUT',

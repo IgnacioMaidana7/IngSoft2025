@@ -26,10 +26,21 @@ class ProductoPagination(PageNumberPagination):
 # === VISTAS PARA CATEGORÍAS ===
 
 class CategoriaListCreateView(generics.ListCreateAPIView):
-    queryset = Categoria.objects.filter(activo=True).order_by('nombre')
     serializer_class = CategoriaSerializer
     permission_classes = [IsReponedorOrAdmin]
     pagination_class = ProductoPagination
+    
+    def get_queryset(self):
+        """Obtener categorías globales y personalizadas del usuario"""
+        # Categorías globales (sin usuario asignado) + categorías personalizadas del usuario
+        return Categoria.objects.filter(
+            Q(usuario__isnull=True) | Q(usuario=self.request.user),
+            activo=True
+        ).order_by('nombre')
+    
+    def perform_create(self, serializer):
+        """Asignar automáticamente el usuario actual al crear una categoría"""
+        serializer.save(usuario=self.request.user)
 
 class CategoriaDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Categoria.objects.all()
@@ -47,9 +58,35 @@ class CategoriaDetailView(generics.RetrieveUpdateDestroyAPIView):
 @permission_classes([IsReponedorOrAdmin])
 def obtener_categorias_disponibles(request):
     """Obtener lista simplificada de categorías para dropdown"""
-    categorias = Categoria.objects.filter(activo=True).order_by('nombre')
+    # Categorías globales + categorías personalizadas del usuario
+    categorias = Categoria.objects.filter(
+        Q(usuario__isnull=True) | Q(usuario=request.user),
+        activo=True
+    ).order_by('nombre')
     serializer = CategoriaListSerializer(categorias, many=True)
     return Response(serializer.data)
+
+@api_view(['POST'])
+@permission_classes([IsReponedorOrAdmin])
+def crear_categoria_personalizada(request):
+    """Crear una categoría personalizada para el usuario actual"""
+    serializer = CategoriaSerializer(data=request.data)
+    if serializer.is_valid():
+        # Verificar que no exista una categoría con el mismo nombre para este usuario
+        nombre = serializer.validated_data['nombre']
+        if Categoria.objects.filter(
+            nombre=nombre,
+            usuario=request.user,
+            activo=True
+        ).exists():
+            return Response(
+                {'error': 'Ya tienes una categoría con este nombre'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        categoria = serializer.save(usuario=request.user)
+        return Response(CategoriaListSerializer(categoria).data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 # === VISTAS PARA PRODUCTOS ===
 
