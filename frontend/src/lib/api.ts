@@ -586,6 +586,39 @@ export interface ProductosPorDeposito {
   productos: ProductoDeposito[];
 }
 
+export interface ProductoMiDeposito {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  categoria: {
+    id: number;
+    nombre: string;
+  };
+  precio: number;
+  codigo_barras: string;
+  activo: boolean;
+  stock: {
+    cantidad: number;
+    cantidad_minima: number;
+    tiene_stock: boolean;
+    stock_bajo: boolean;
+    deposito: {
+      id: number;
+      nombre: string;
+    };
+  };
+}
+
+export interface ProductosMiDeposito {
+  deposito: {
+    id: number;
+    nombre: string;
+    ubicacion: string;
+  };
+  productos: ProductoMiDeposito[];
+  total_productos: number;
+}
+
 export interface EstadisticasProductos {
   total_productos: number;
   total_categorias: number;
@@ -720,6 +753,14 @@ export async function eliminarProducto(id: number, token: string): Promise<void>
 
 export async function obtenerProductosPorDeposito(depositoId: number, token: string): Promise<ProductosPorDeposito> {
   return apiFetch<ProductosPorDeposito>(`/api/productos/deposito/${depositoId}/`, {
+    method: 'GET',
+    token
+  });
+}
+
+// Obtener productos del depósito asignado al reponedor actual
+export async function obtenerProductosMiDeposito(token: string): Promise<ProductosMiDeposito> {
+  return apiFetch<ProductosMiDeposito>('/api/productos/mi-deposito/', {
     method: 'GET',
     token
   });

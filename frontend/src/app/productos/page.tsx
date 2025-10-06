@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import FiltroCategorias from '@/components/productos/FiltroCategorias';
+import ProductosReponedor from '@/components/productos/ProductosReponedor';
 import { 
   obtenerProductos, 
   obtenerCategoriasDisponibles, 
@@ -40,6 +41,7 @@ export default function ProductosPage() {
   const [depositos, setDepositos] = useState<Deposito[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isReponedor, setIsReponedor] = useState(false);
   
   // Filtros y paginación
   const [searchTerm, setSearchTerm] = useState('');
@@ -110,6 +112,11 @@ export default function ProductosPage() {
       router.push('/login');
       return;
     }
+    
+    // Detectar tipo de usuario
+    const userType = localStorage.getItem('userType');
+    setIsReponedor(userType === 'reponedor');
+    
     loadData();
   }, [loadData, token, isLoggedIn, router]);
 
@@ -156,6 +163,11 @@ export default function ProductosPage() {
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-900"></div>
       </div>
     );
+  }
+
+  // Si es reponedor, mostrar componente específico
+  if (isReponedor) {
+    return <ProductosReponedor />;
   }
 
   return (

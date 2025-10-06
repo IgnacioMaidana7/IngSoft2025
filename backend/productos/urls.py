@@ -13,6 +13,7 @@ urlpatterns = [
     path('', views.ProductoListCreateView.as_view(), name='producto-list-create'),
     path('<int:pk>/', views.ProductoDetailView.as_view(), name='producto-detail'),
     path('estadisticas/', views.estadisticas_productos, name='estadisticas-productos'),
+    path('mi-deposito/', views.productos_mi_deposito, name='productos-mi-deposito'),
     
     # URLs para stock de productos
     path('<int:producto_id>/stock/', views.gestionar_stock_producto, name='producto-stock'),
