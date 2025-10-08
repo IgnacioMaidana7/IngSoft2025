@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import { useRouter } from "next/navigation";
@@ -18,6 +18,17 @@ export default function NuevoDepositoPage() {
   const [direccion, setDireccion] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Verificar permisos al cargar el componente
+  useEffect(() => {
+    const userType = localStorage.getItem('user_type');
+    const esReponedor = userType === 'empleado';
+    
+    if (esReponedor) {
+      showToast('No tienes permisos para crear depósitos', 'error');
+      router.push('/inventario/depositos');
+    }
+  }, [router, showToast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

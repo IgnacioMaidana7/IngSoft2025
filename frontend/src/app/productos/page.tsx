@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import FiltroCategorias from '@/components/productos/FiltroCategorias';
+import ProductosReponedor from '@/components/productos/ProductosReponedor';
 import { 
   obtenerProductos, 
   obtenerCategoriasDisponibles, 
@@ -39,6 +41,7 @@ export default function ProductosPage() {
   const [depositos, setDepositos] = useState<Deposito[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isReponedor, setIsReponedor] = useState(false);
   
   // Filtros y paginación
   const [searchTerm, setSearchTerm] = useState('');
@@ -109,6 +112,11 @@ export default function ProductosPage() {
       router.push('/login');
       return;
     }
+    
+    // Detectar tipo de usuario
+    const userType = localStorage.getItem('userType');
+    setIsReponedor(userType === 'reponedor');
+    
     loadData();
   }, [loadData, token, isLoggedIn, router]);
 
@@ -157,6 +165,11 @@ export default function ProductosPage() {
     );
   }
 
+  // Si es reponedor, mostrar componente específico
+  if (isReponedor) {
+    return <ProductosReponedor />;
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8">
@@ -199,18 +212,13 @@ export default function ProductosPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Categoría
             </label>
-            <select
+            <FiltroCategorias
+              categorias={categorias}
               value={selectedCategoria}
-              onChange={(e) => setSelectedCategoria(e.target.value ? Number(e.target.value) : '')}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Todas las categorías</option>
-              {categorias.map((categoria) => (
-                <option key={categoria.id} value={categoria.id}>
-                  {categoria.nombre}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedCategoria}
+              placeholder="Todas las categorías"
+              className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
 
           <div>

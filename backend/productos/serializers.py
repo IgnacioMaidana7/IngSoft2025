@@ -40,6 +40,12 @@ class ProductoSerializer(serializers.ModelSerializer):
                  'fecha_creacion', 'fecha_modificacion']
         read_only_fields = ['fecha_creacion', 'fecha_modificacion']
     
+    def validate_precio(self, value):
+        """Validar que el precio sea positivo"""
+        if value is not None and value <= 0:
+            raise serializers.ValidationError('El precio debe ser mayor a 0')
+        return value
+    
     def get_stock_total(self, obj):
         """Calcula el stock total solo de los depósitos del usuario actual"""
         request = self.context.get('request')
@@ -125,6 +131,12 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
         model = Producto
         fields = ['id', 'nombre', 'categoria', 'precio', 'descripcion', 'activo',
                  'deposito_id', 'cantidad_inicial', 'cantidad_minima']
+
+    def validate_precio(self, value):
+        """Validar que el precio sea positivo"""
+        if value is not None and value <= 0:
+            raise serializers.ValidationError('El precio debe ser mayor a 0')
+        return value
 
     def validate(self, attrs):
         # Solo validar campos obligatorios al crear (instance is None)
