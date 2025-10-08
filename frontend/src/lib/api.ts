@@ -39,17 +39,9 @@ export async function apiFetch<TResponse>(
 
   if (!response.ok) {
     let errorMessage = `HTTP ${response.status}`;
-    let errorDetails = null;
     
     try {
       const errorData = await response.json();
-      console.error('🔴 Error de API:', {
-        status: response.status,
-        statusText: response.statusText,
-        data: errorData
-      });
-      
-      errorDetails = errorData;
       
       // Si es un error de validación de Django (400), extraer los mensajes
       if (response.status === 400 && errorData) {
@@ -70,37 +62,17 @@ export async function apiFetch<TResponse>(
           errorMessage = errorData.detail;
         } else if (errorData.message) {
           errorMessage = errorData.message;
-        } else if (errorData.error) {
-          errorMessage = errorData.error;
-        }
-      } else if (errorData.error) {
-        errorMessage = errorData.error;
-        // Agregar detalles si existen
-        if (errorData.details) {
-          errorMessage += `\nDetalles: ${errorData.details}`;
         }
       } else if (errorData.detail) {
         errorMessage = errorData.detail;
       } else if (errorData.message) {
         errorMessage = errorData.message;
       }
-    } catch (parseError) {
-      // Si no se puede parsear JSON, intentar obtener texto plano
-      console.error('⚠️ No se pudo parsear respuesta de error como JSON');
-      try {
-        const textError = await response.text();
-        if (textError) {
-          console.error('Respuesta de error (texto):', textError.substring(0, 500));
-          errorMessage = `HTTP ${response.status}: ${textError.substring(0, 200)}`;
-        }
-      } catch {
-        // Usar el status por defecto
-      }
+    } catch {
+      // Si no se puede parsear JSON, usar el status por defecto
     }
     
-    const error = new Error(errorMessage) as Error & { details?: any };
-    error.details = errorDetails;
-    throw error;
+    throw new Error(errorMessage);
   }
 
   const contentType = response.headers.get("content-type") ?? "";

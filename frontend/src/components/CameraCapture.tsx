@@ -1,19 +1,16 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { uploadPhoto, type ReconocimientoResponse } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
-// Tipo para el resultado de captura (retorna el blob directamente)
-type CaptureResult = {
-  blob: Blob;
-  dataUrl: string;
-};
-
-export default function CameraCapture({ onUploaded }: { onUploaded?: (result: CaptureResult) => void }) {
+export default function CameraCapture({ onUploaded }: { onUploaded?: (result: ReconocimientoResponse) => void }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [cameraState, setCameraState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
+  const { token } = useAuth();
 
   const stopStream = useCallback(() => {
     if (streamRef.current) {
@@ -193,23 +190,25 @@ export default function CameraCapture({ onUploaded }: { onUploaded?: (result: Ca
       
       // Convertir a blob
       const blob = await new Promise<Blob | null>((resolve) => {
-        canvas.toBlob(resolve, 'image/jpeg', 0.95); // Calidad alta
+        canvas.toBlob(resolve, 'image/jpeg', 0.92);
       });
       
       if (!blob) {
         throw new Error('No se pudo crear la imagen');
       }
       
-      console.log('Imagen capturada:', {
-        size: blob.size,
-        type: blob.type
-      });
+      // Crear archivo y subir
+      const file = new File([blob], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      console.log('Subiendo foto:', file.size, 'bytes');
       
-      // Crear data URL para preview (opcional)
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      const result = await uploadPhoto(file, token);
+      console.log('Resultado del reconocimiento:', result);
       
-      // Devolver el blob para que el componente padre lo procese
-      onUploaded?.({ blob, dataUrl });
+      if (result.success) {
+        onUploaded?.(result);
+      } else {
+        throw new Error(result.error || 'Error en el reconocimiento de productos');
+      }
       
     } catch (err) {
       console.error('Error capturando foto:', err);
@@ -217,7 +216,7 @@ export default function CameraCapture({ onUploaded }: { onUploaded?: (result: Ca
     } finally {
       setIsCapturing(false);
     }
-  }, [cameraState, isCapturing, onUploaded]);
+  }, [cameraState, isCapturing, token, onUploaded]);
 
   const retryCamera = useCallback(async () => {
     try {
@@ -293,19 +292,15 @@ export default function CameraCapture({ onUploaded }: { onUploaded?: (result: Ca
               const file = e.target.files?.[0];
               if (!file) return;
               try {
-                // Convertir archivo a blob y dataURL
-                const blob = file.slice(0, file.size, file.type);
-                const reader = new FileReader();
-                
-                reader.onload = (event) => {
-                  const dataUrl = event.target?.result as string;
-                  onUploaded?.({ blob, dataUrl });
-                };
-                
-                reader.readAsDataURL(file);
+                const result = await uploadPhoto(file, token);
+                if (result.success) {
+                  onUploaded?.(result);
+                } else {
+                  throw new Error(result.error || 'Error en el reconocimiento de productos');
+                }
               } catch (err) {
-                console.error('Error procesando archivo:', err);
-                setError(err instanceof Error ? err.message : 'Error al procesar el archivo');
+                console.error('Error subiendo archivo:', err);
+                setError(err instanceof Error ? err.message : 'Error al subir el archivo');
               }
             }}
           />
