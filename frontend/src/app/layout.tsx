@@ -32,7 +32,10 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.webmanifest" />
         <meta name="theme-color" content="#0ea5e9" />
       </head>
-      <body className={`${geistSans.className} ${geistMono.className} bg-background text-text antialiased`}>
+      <body 
+        className={`${geistSans.className} ${geistMono.className} bg-background text-text antialiased`}
+        suppressHydrationWarning
+      >
         <AuthProvider>
           <NotificationsProvider>
             <ConditionalNavbar>

@@ -27,12 +27,25 @@ export default function EditarDepositoPage() {
   const [descripcion, setDescripcion] = useState("");
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [isReponedor, setIsReponedor] = useState(false);
 
   const depositoId = parseInt(params.id as string);
 
-  // Cargar datos del depósito
+  // Cargar datos del depósito y verificar permisos
   useEffect(() => {
     if (!token || !depositoId) return;
+
+    // Verificar si es reponedor
+    const userType = localStorage.getItem('user_type');
+    const esReponedor = userType === 'empleado';
+    setIsReponedor(esReponedor);
+
+    // Si es reponedor, redirigir a la lista de depósitos
+    if (esReponedor) {
+      showToast('No tienes permisos para editar depósitos', 'error');
+      router.push('/inventario/depositos');
+      return;
+    }
 
     const cargarDeposito = async () => {
       try {

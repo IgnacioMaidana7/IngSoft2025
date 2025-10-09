@@ -26,10 +26,21 @@ class ProductoPagination(PageNumberPagination):
 # === VISTAS PARA CATEGORÍAS ===
 
 class CategoriaListCreateView(generics.ListCreateAPIView):
-    queryset = Categoria.objects.filter(activo=True).order_by('nombre')
     serializer_class = CategoriaSerializer
     permission_classes = [IsReponedorOrAdmin]
     pagination_class = ProductoPagination
+    
+    def get_queryset(self):
+        """Obtener categorías globales y personalizadas del usuario"""
+        # Categorías globales (sin usuario asignado) + categorías personalizadas del usuario
+        return Categoria.objects.filter(
+            Q(usuario__isnull=True) | Q(usuario=self.request.user),
+            activo=True
+        ).order_by('nombre')
+    
+    def perform_create(self, serializer):
+        """Asignar automáticamente el usuario actual al crear una categoría"""
+        serializer.save(usuario=self.request.user)
 
 class CategoriaDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Categoria.objects.all()
@@ -47,9 +58,65 @@ class CategoriaDetailView(generics.RetrieveUpdateDestroyAPIView):
 @permission_classes([IsReponedorOrAdmin])
 def obtener_categorias_disponibles(request):
     """Obtener lista simplificada de categorías para dropdown"""
-    categorias = Categoria.objects.filter(activo=True).order_by('nombre')
-    serializer = CategoriaListSerializer(categorias, many=True)
-    return Response(serializer.data)
+    try:
+        # Para reponedores, necesitamos obtener el usuario administrador del supermercado
+        if hasattr(request.user, 'supermercado'):
+            # Es un EmpleadoUser - obtener categorías del supermercado
+            usuario_supermercado = request.user.supermercado
+            categorias = Categoria.objects.filter(
+                Q(usuario__isnull=True) | Q(usuario=usuario_supermercado),
+                activo=True
+            ).order_by('nombre')
+        else:
+            # Es un User administrador - obtener sus categorías
+            categorias = Categoria.objects.filter(
+                Q(usuario__isnull=True) | Q(usuario=request.user),
+                activo=True
+            ).order_by('nombre')
+        
+        serializer = CategoriaListSerializer(categorias, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        return Response(
+            {'error': f'Error al obtener categorías: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['POST'])
+@permission_classes([IsReponedorOrAdmin])
+def crear_categoria_personalizada(request):
+    """Crear una categoría personalizada para el usuario actual"""
+    try:
+        serializer = CategoriaSerializer(data=request.data)
+        if serializer.is_valid():
+            # Determinar el usuario correcto para asignar la categoría
+            if hasattr(request.user, 'supermercado'):
+                # Es un EmpleadoUser - asignar al supermercado
+                usuario_propietario = request.user.supermercado
+            else:
+                # Es un User administrador 
+                usuario_propietario = request.user
+            
+            # Verificar que no exista una categoría con el mismo nombre para este usuario
+            nombre = serializer.validated_data['nombre']
+            if Categoria.objects.filter(
+                nombre=nombre,
+                usuario=usuario_propietario,
+                activo=True
+            ).exists():
+                return Response(
+                    {'error': 'Ya existe una categoría con este nombre'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            categoria = serializer.save(usuario=usuario_propietario)
+            return Response(CategoriaListSerializer(categoria).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response(
+            {'error': f'Error al crear categoría: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 # === VISTAS PARA PRODUCTOS ===
 
@@ -124,11 +191,33 @@ class ProductoDetailView(generics.RetrieveUpdateDestroyAPIView):
             return ProductoCreateUpdateSerializer
         return ProductoSerializer
     
+    def retrieve(self, request, *args, **kwargs):
+        """Personalizar la respuesta para filtrar stocks del usuario"""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        data = serializer.data
+        
+        # Filtrar stocks solo del usuario actual
+        user = request.user
+        if hasattr(user, 'supermercado'):
+            # Usuario EmpleadoUser - filtrar por supermercado
+            user_stocks = instance.stocks.filter(deposito__supermercado=user.supermercado)
+        elif hasattr(user, 'depositos'):
+            # Usuario Admin - filtrar por sus depósitos
+            user_stocks = instance.stocks.filter(deposito__supermercado=user)
+        else:
+            user_stocks = instance.stocks.none()
+        
+        # Reemplazar los stocks en la respuesta con solo los del usuario
+        data['stocks'] = ProductoDepositoSerializer(user_stocks, many=True).data
+        
+        return Response(data)
+    
     def update(self, request, *args, **kwargs):
         # Usar ProductoCreateUpdateSerializer para validación
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
-        serializer = ProductoCreateUpdateSerializer(instance, data=request.data, partial=partial)
+        serializer = ProductoCreateUpdateSerializer(instance, data=request.data, partial=partial, context={'request': request})
         serializer.is_valid(raise_exception=True)
         
         # Guardar con el serializer de entrada
@@ -140,7 +229,7 @@ class ProductoDetailView(generics.RetrieveUpdateDestroyAPIView):
         
         # Recargar la instancia para obtener datos actualizados
         instance.refresh_from_db()
-        output_serializer = ProductoSerializer(instance)
+        output_serializer = ProductoSerializer(instance, context={'request': request})
         return Response(output_serializer.data)
 
     def get_object(self):
@@ -175,14 +264,20 @@ def gestionar_stock_producto(request, producto_id):
     
     if request.method == 'GET':
         stocks_qs = ProductoDeposito.objects.filter(producto=producto).select_related('deposito')
-        # Repos: solo ver su depósito
-        if isinstance(request.user, EmpleadoUser):
-            from empleados.models import Empleado
-            emp = Empleado.objects.filter(email=request.user.email, supermercado=request.user.supermercado).first()
+        
+        # Filtrar por usuario: solo mostrar stocks de sus depósitos
+        user = request.user
+        if isinstance(user, EmpleadoUser):
+            # Reponedor: solo su depósito
+            emp = Empleado.objects.filter(email=user.email, supermercado=user.supermercado).first()
             if emp:
                 stocks_qs = stocks_qs.filter(deposito=emp.deposito)
             else:
                 return Response({"detail": "Empleado sin depósito asignado"}, status=status.HTTP_403_FORBIDDEN)
+        elif hasattr(user, 'depositos'):
+            # Admin: solo sus depósitos
+            stocks_qs = stocks_qs.filter(deposito__supermercado=user)
+        
         stocks = stocks_qs
         serializer = ProductoDepositoSerializer(stocks, many=True)
         return Response(serializer.data)
@@ -475,3 +570,66 @@ def estadisticas_productos(request):
         'productos_sin_stock': productos_sin_stock,
         'stock_por_categoria': stock_por_categoria
     })
+
+
+@api_view(['GET'])
+@permission_classes([IsReponedorOrAdmin])
+def productos_mi_deposito(request):
+    """Obtener productos del depósito asignado al reponedor actual con información de stock"""
+    try:
+        # Obtener el empleado asociado al usuario actual
+        empleado_user = EmpleadoUser.objects.get(user=request.user)
+        empleado = empleado_user.empleado
+        deposito = empleado.deposito
+        
+        # Obtener productos con stock en el depósito del reponedor
+        stocks = ProductoDeposito.objects.filter(
+            deposito=deposito,
+            producto__activo=True
+        ).select_related('producto', 'producto__categoria').order_by('producto__nombre')
+        
+        productos_data = []
+        for stock in stocks:
+            productos_data.append({
+                'id': stock.producto.id,
+                'nombre': stock.producto.nombre,
+                'descripcion': stock.producto.descripcion,
+                'categoria': {
+                    'id': stock.producto.categoria.id,
+                    'nombre': stock.producto.categoria.nombre
+                },
+                'precio': float(stock.producto.precio),
+                'codigo_barras': stock.producto.codigo_barras,
+                'activo': stock.producto.activo,
+                'stock': {
+                    'cantidad': stock.cantidad,
+                    'cantidad_minima': stock.cantidad_minima,
+                    'tiene_stock': stock.tiene_stock(),
+                    'stock_bajo': stock.stock_bajo(),
+                    'deposito': {
+                        'id': deposito.id,
+                        'nombre': deposito.nombre
+                    }
+                }
+            })
+        
+        return Response({
+            'deposito': {
+                'id': deposito.id,
+                'nombre': deposito.nombre,
+                'ubicacion': deposito.ubicacion
+            },
+            'productos': productos_data,
+            'total_productos': len(productos_data)
+        })
+        
+    except EmpleadoUser.DoesNotExist:
+        return Response(
+            {'error': 'No se encontró información del empleado para este usuario'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Error al obtener productos del depósito: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

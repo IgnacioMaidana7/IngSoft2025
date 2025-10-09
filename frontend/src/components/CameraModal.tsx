@@ -7,25 +7,25 @@ import { useToast } from "@/components/feedback/ToastProvider";
 interface CameraModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onPhotoUploaded?: (result: { id: string; url: string }) => void;
+  onPhotoCapture?: (captureData: { blob: Blob; dataUrl: string }) => void;
 }
 
-export default function CameraModal({ isOpen, onClose, onPhotoUploaded }: CameraModalProps) {
-  const [isUploading, setIsUploading] = useState(false);
+export default function CameraModal({ isOpen, onClose, onPhotoCapture }: CameraModalProps) {
+  const [isProcessing, setIsProcessing] = useState(false);
   const { showToast } = useToast();
 
   if (!isOpen) return null;
 
-  const handlePhotoUploaded = async (result: { id: string; url: string }) => {
+  const handlePhotoCapture = async (result: { blob: Blob; dataUrl: string }) => {
     try {
-      setIsUploading(true);
-      showToast("Foto capturada y guardada exitosamente", "success");
-      onPhotoUploaded?.(result);
+      setIsProcessing(true);
+      showToast("Foto capturada exitosamente", "success");
+      onPhotoCapture?.(result);
       onClose();
     } catch (error) {
       showToast("Error al procesar la foto", "error");
     } finally {
-      setIsUploading(false);
+      setIsProcessing(false);
     }
   };
 
@@ -37,7 +37,7 @@ export default function CameraModal({ isOpen, onClose, onPhotoUploaded }: Camera
           <Button 
             variant="secondary" 
             onClick={onClose}
-            disabled={isUploading}
+            disabled={isProcessing}
           >
             ✕
           </Button>
@@ -51,13 +51,13 @@ export default function CameraModal({ isOpen, onClose, onPhotoUploaded }: Camera
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {isUploading ? (
+          {isProcessing ? (
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
               <p>Guardando foto...</p>
             </div>
           ) : (
-            <CameraCapture onUploaded={handlePhotoUploaded} />
+            <CameraCapture onUploaded={handlePhotoCapture} />
           )}
         </div>
         
@@ -65,7 +65,7 @@ export default function CameraModal({ isOpen, onClose, onPhotoUploaded }: Camera
           <Button 
             variant="secondary" 
             onClick={onClose}
-            disabled={isUploading}
+            disabled={isProcessing}
           >
             Cancelar
           </Button>

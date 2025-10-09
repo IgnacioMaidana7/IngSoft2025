@@ -216,3 +216,6 @@ CORS_ALLOW_ALL_ORIGINS = DEBUG  # Solo en desarrollo
 # Configuración adicional para desarrollo
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
+
+# URL de la API de reconocimiento de productos
+RECOGNITION_API_URL = config('RECOGNITION_API_URL', default='http://localhost:8080')

@@ -146,14 +146,38 @@ export async function downloadFile(
   return response.blob();
 }
 
+// Interfaces para el reconocimiento de productos
+export interface ProductoDetectado {
+  ingsoft_product_id?: number;
+  nombre?: string;
+  confidence?: number;
+  bounding_box?: number[];
+  nombre_db?: string;
+  categoria_db?: string;
+  precio_db?: string;
+  existe_en_bd?: boolean;
+  stock_disponible?: number;
+  stock_minimo?: number;
+  stock_bajo?: boolean;
+  mensaje?: string;
+}
+
+export interface ReconocimientoResponse {
+  success: boolean;
+  productos?: ProductoDetectado[];
+  error?: string;
+  details?: string;
+  stock_suggestions?: ProductoDetectado[];
+}
+
 export async function uploadPhoto(
   file: File,
   token?: string | null
-): Promise<{ id: string; url: string }>
+): Promise<ReconocimientoResponse>
 {
   const formData = new FormData();
-  formData.append("file", file);
-  return apiFetch("/api/photos/", { method: "POST", body: formData, token: token ?? null, isMultipart: true });
+  formData.append("image", file); // El endpoint espera 'image', no 'file'
+  return apiFetch<ReconocimientoResponse>("/api/productos/reconocer-imagen/", { method: "POST", body: formData, token: token ?? null, isMultipart: true });
 }
 
 // Funciones de autenticación para supermercados
@@ -250,6 +274,7 @@ export interface EmpleadoAuthResponse {
     is_active: boolean;
   };
   user_type: 'empleado';
+  user_role: 'CAJERO' | 'REPONEDOR';
 }
 
 export async function loginEmpleado(data: EmpleadoLoginData): Promise<EmpleadoAuthResponse> {
@@ -264,6 +289,37 @@ export async function obtenerPerfilEmpleado(token: string): Promise<EmpleadoAuth
   return apiFetch<EmpleadoAuthResponse['user']>('/api/auth/empleado/profile/', {
     method: 'GET',
     token
+  });
+}
+
+// Funciones para obtener datos geográficos (proxy para API de Georef)
+export interface Provincia {
+  id: string;
+  nombre: string;
+}
+
+export interface Localidad {
+  id: string;
+  nombre: string;
+}
+
+export interface ProvinciasResponse {
+  provincias: Provincia[];
+}
+
+export interface LocalidadesResponse {
+  localidades: Localidad[];
+}
+
+export async function obtenerProvincias(): Promise<ProvinciasResponse> {
+  return apiFetch<ProvinciasResponse>('/api/auth/provincias/', {
+    method: 'GET'
+  });
+}
+
+export async function obtenerLocalidades(provinciaId: string): Promise<LocalidadesResponse> {
+  return apiFetch<LocalidadesResponse>(`/api/auth/localidades/?provincia=${provinciaId}`, {
+    method: 'GET'
   });
 }
 
@@ -534,6 +590,39 @@ export interface ProductosPorDeposito {
   productos: ProductoDeposito[];
 }
 
+export interface ProductoMiDeposito {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  categoria: {
+    id: number;
+    nombre: string;
+  };
+  precio: number;
+  codigo_barras: string;
+  activo: boolean;
+  stock: {
+    cantidad: number;
+    cantidad_minima: number;
+    tiene_stock: boolean;
+    stock_bajo: boolean;
+    deposito: {
+      id: number;
+      nombre: string;
+    };
+  };
+}
+
+export interface ProductosMiDeposito {
+  deposito: {
+    id: number;
+    nombre: string;
+    ubicacion: string;
+  };
+  productos: ProductoMiDeposito[];
+  total_productos: number;
+}
+
 export interface EstadisticasProductos {
   total_productos: number;
   total_categorias: number;
@@ -569,6 +658,14 @@ export async function obtenerCategoriasDisponibles(token: string): Promise<Categ
 
 export async function crearCategoria(data: Omit<Categoria, 'id' | 'fecha_creacion'>, token: string): Promise<Categoria> {
   return apiFetch<Categoria>('/api/productos/categorias/', {
+    method: 'POST',
+    body: data,
+    token
+  });
+}
+
+export async function crearCategoriaPersonalizada(data: { nombre: string; descripcion?: string }, token: string): Promise<CategoriaSimple> {
+  return apiFetch<CategoriaSimple>('/api/productos/categorias/crear-personalizada/', {
     method: 'POST',
     body: data,
     token
@@ -660,6 +757,14 @@ export async function eliminarProducto(id: number, token: string): Promise<void>
 
 export async function obtenerProductosPorDeposito(depositoId: number, token: string): Promise<ProductosPorDeposito> {
   return apiFetch<ProductosPorDeposito>(`/api/productos/deposito/${depositoId}/`, {
+    method: 'GET',
+    token
+  });
+}
+
+// Obtener productos del depósito asignado al reponedor actual
+export async function obtenerProductosMiDeposito(token: string): Promise<ProductosMiDeposito> {
+  return apiFetch<ProductosMiDeposito>('/api/productos/mi-deposito/', {
     method: 'GET',
     token
   });
@@ -1046,4 +1151,75 @@ export async function descargarTicketHistorial(ventaId: number, token: string): 
     console.error('Error descargando PDF del historial:', error);
     throw error;
   }
+}
+
+// === RECONOCIMIENTO DE PRODUCTOS ===
+export interface ProductoReconocido {
+  product_id: number;
+  ingsoft_product_id: number | null;
+  name: string;
+  display_name: string;
+  category: string;
+  brand: string;
+  detection_confidence: number;
+  classification_confidence: number;
+  bbox: {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    width: number;
+    height: number;
+  };
+  // Información enriquecida desde la BD
+  nombre_db?: string;
+  categoria_db?: string;
+  precio_db?: string;
+  existe_en_bd?: boolean;
+  stock_disponible?: number;
+  stock_minimo?: number;
+  stock_bajo?: boolean;
+  mensaje?: string;
+}
+
+export interface RecognitionResponse {
+  success: boolean;
+  total_productos: number;
+  productos: ProductoReconocido[];
+  processing_time_ms: number;
+  deposito_id?: number;
+  error?: string;
+  stock_suggestions?: any[];
+}
+
+// Reconocer productos desde una imagen
+export async function reconocerProductosImagen(
+  imageFile: File,
+  token: string
+): Promise<RecognitionResponse> {
+  const formData = new FormData();
+  formData.append('image', imageFile);
+  
+  return apiFetch<RecognitionResponse>('/api/productos/reconocer-imagen/', {
+    method: 'POST',
+    body: formData,
+    token,
+    isMultipart: true
+  });
+}
+
+// Verificar estado de la API de reconocimiento
+export async function verificarApiReconocimiento(token: string): Promise<{ success: boolean; status: string; details?: any; error?: string }> {
+  return apiFetch<{ success: boolean; status: string; details?: any; error?: string }>('/api/productos/verificar-api-reconocimiento/', {
+    method: 'GET',
+    token
+  });
+}
+
+// Obtener catálogo de productos reconocibles
+export async function obtenerCatalogoReconocimiento(token: string): Promise<any> {
+  return apiFetch<any>('/api/productos/catalogo-reconocimiento/', {
+    method: 'GET',
+    token
+  });
 }
