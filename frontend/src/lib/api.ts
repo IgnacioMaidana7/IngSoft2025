@@ -274,6 +274,7 @@ export interface EmpleadoAuthResponse {
     is_active: boolean;
   };
   user_type: 'empleado';
+  user_role: 'CAJERO' | 'REPONEDOR';
 }
 
 export async function loginEmpleado(data: EmpleadoLoginData): Promise<EmpleadoAuthResponse> {
@@ -288,6 +289,37 @@ export async function obtenerPerfilEmpleado(token: string): Promise<EmpleadoAuth
   return apiFetch<EmpleadoAuthResponse['user']>('/api/auth/empleado/profile/', {
     method: 'GET',
     token
+  });
+}
+
+// Funciones para obtener datos geográficos (proxy para API de Georef)
+export interface Provincia {
+  id: string;
+  nombre: string;
+}
+
+export interface Localidad {
+  id: string;
+  nombre: string;
+}
+
+export interface ProvinciasResponse {
+  provincias: Provincia[];
+}
+
+export interface LocalidadesResponse {
+  localidades: Localidad[];
+}
+
+export async function obtenerProvincias(): Promise<ProvinciasResponse> {
+  return apiFetch<ProvinciasResponse>('/api/auth/provincias/', {
+    method: 'GET'
+  });
+}
+
+export async function obtenerLocalidades(provinciaId: string): Promise<LocalidadesResponse> {
+  return apiFetch<LocalidadesResponse>(`/api/auth/localidades/?provincia=${provinciaId}`, {
+    method: 'GET'
   });
 }
 

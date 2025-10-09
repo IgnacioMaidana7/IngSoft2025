@@ -185,7 +185,9 @@ export default function NuevoProductoPage() {
           <button
             onClick={handleCancel}
             className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 transition-colors"
+            title="Volver a Productos"
           >
+            <span className="text-2xl">←</span>
           </button>
           <div className="w-12 h-12 bg-gradient-to-br from-primary to-primary/80 rounded-2xl flex items-center justify-center text-white text-2xl shadow-xl shadow-primary/30">
             🏷️

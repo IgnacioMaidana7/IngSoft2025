@@ -207,7 +207,7 @@ export default function VentasPage() {
 		setMostrarProductos(false);
 	};
 
-	const handlePhotoUploaded = async (captureData: { blob: Blob; dataUrl: string }) => {
+	const handlePhotoUploaded = async (resultadoReconocimiento: any) => {
 		if (!token) {
 			showToast("No hay sesión activa", "error");
 			return;
@@ -216,28 +216,9 @@ export default function VentasPage() {
 		try {
 			setReconociendo(true);
 			setIsCameraModalOpen(false);
-			showToast("🔍 Analizando imagen...", "info");
+			showToast("🔍 Procesando productos reconocidos...", "info");
 			
-			console.log("📸 Imagen capturada:", {
-				size: captureData.blob.size,
-				type: captureData.blob.type
-			});
-			
-			// Crear archivo desde el blob
-			const file = new File([captureData.blob], 'captura.jpg', { 
-				type: captureData.blob.type || 'image/jpeg',
-				lastModified: Date.now()
-			});
-			
-			console.log("📁 Archivo creado:", {
-				name: file.name,
-				size: file.size,
-				type: file.type
-			});
-			
-			// Enviar a la API de reconocimiento
-			console.log("🚀 Enviando imagen a la API de reconocimiento...");
-			const resultadoReconocimiento = await reconocerProductosImagen(file, token);
+			console.log("� Resultado del reconocimiento recibido:", resultadoReconocimiento);
 			console.log("📡 Respuesta recibida:", resultadoReconocimiento);
 			
 			if (resultadoReconocimiento.success && resultadoReconocimiento.productos.length > 0) {

@@ -384,30 +384,61 @@ class VentaViewSet(ModelViewSet):
 def obtener_productos_disponibles(request):
     """Obtener lista de productos disponibles para venta"""
     try:
-        # Determinar el supermercado según el tipo de usuario
+        # Determinar el supermercado y depósito según el tipo de usuario
         if hasattr(request.user, 'supermercado'):
-            # Es un empleado
+            # Es un empleado (cajero/reponedor)
             cajero_supermercado = request.user.supermercado
+            
+            # Obtener el depósito asignado al empleado
+            from empleados.models import Empleado
+            try:
+                empleado = Empleado.objects.get(
+                    email=request.user.email,
+                    supermercado=cajero_supermercado
+                )
+                deposito_empleado = empleado.deposito
+            except Empleado.DoesNotExist:
+                deposito_empleado = None
         else:
             # Es un admin de supermercado
             cajero_supermercado = request.user
+            deposito_empleado = None
         
-        productos_con_stock = Producto.objects.filter(
-            activo=True,
-            stocks__deposito__supermercado=cajero_supermercado,
-            stocks__deposito__activo=True,
-            stocks__cantidad__gt=0
-        ).distinct().select_related('categoria').prefetch_related('stocks')
+        # Filtrar productos según si tiene depósito asignado o no
+        if deposito_empleado:
+            # Empleado con depósito asignado: solo productos de su depósito
+            productos_con_stock = Producto.objects.filter(
+                activo=True,
+                stocks__deposito=deposito_empleado,
+                stocks__cantidad__gt=0
+            ).distinct().select_related('categoria').prefetch_related('stocks')
+        else:
+            # Admin o empleado sin depósito: todos los productos del supermercado
+            productos_con_stock = Producto.objects.filter(
+                activo=True,
+                stocks__deposito__supermercado=cajero_supermercado,
+                stocks__deposito__activo=True,
+                stocks__cantidad__gt=0
+            ).distinct().select_related('categoria').prefetch_related('stocks')
         
         productos_data = []
         for producto in productos_con_stock:
-            # Calcular stock total disponible
-            stock_total = sum(
-                stock.cantidad for stock in producto.stocks.filter(
-                    deposito__supermercado=cajero_supermercado,
-                    deposito__activo=True
+            # Calcular stock según el depósito
+            if deposito_empleado:
+                # Stock solo de su depósito
+                stock_total = sum(
+                    stock.cantidad for stock in producto.stocks.filter(
+                        deposito=deposito_empleado
+                    )
                 )
-            )
+            else:
+                # Stock total de todos los depósitos activos del supermercado
+                stock_total = sum(
+                    stock.cantidad for stock in producto.stocks.filter(
+                        deposito__supermercado=cajero_supermercado,
+                        deposito__activo=True
+                    )
+                )
             
             productos_data.append({
                 'id': producto.id,
@@ -440,32 +471,63 @@ def buscar_productos(request):
         )
     
     try:
-        # Determinar el supermercado según el tipo de usuario
+        # Determinar el supermercado y depósito según el tipo de usuario
         if hasattr(request.user, 'supermercado'):
-            # Es un empleado
+            # Es un empleado (cajero/reponedor)
             cajero_supermercado = request.user.supermercado
+            
+            # Obtener el depósito asignado al empleado
+            from empleados.models import Empleado
+            try:
+                empleado = Empleado.objects.get(
+                    email=request.user.email,
+                    supermercado=cajero_supermercado
+                )
+                deposito_empleado = empleado.deposito
+            except Empleado.DoesNotExist:
+                deposito_empleado = None
         else:
             # Es un admin de supermercado
             cajero_supermercado = request.user
+            deposito_empleado = None
         
-        # Buscar productos que coincidan con la consulta
-        productos = Producto.objects.filter(
-            activo=True,
-            nombre__icontains=query,
-            stocks__deposito__supermercado=cajero_supermercado,
-            stocks__deposito__activo=True,
-            stocks__cantidad__gt=0
-        ).distinct().select_related('categoria')[:20]  # Limitar a 20 resultados
+        # Buscar productos según si tiene depósito asignado o no
+        if deposito_empleado:
+            # Empleado con depósito asignado: solo productos de su depósito
+            productos = Producto.objects.filter(
+                activo=True,
+                nombre__icontains=query,
+                stocks__deposito=deposito_empleado,
+                stocks__cantidad__gt=0
+            ).distinct().select_related('categoria')[:20]
+        else:
+            # Admin o empleado sin depósito: todos los productos del supermercado
+            productos = Producto.objects.filter(
+                activo=True,
+                nombre__icontains=query,
+                stocks__deposito__supermercado=cajero_supermercado,
+                stocks__deposito__activo=True,
+                stocks__cantidad__gt=0
+            ).distinct().select_related('categoria')[:20]
         
         productos_data = []
         for producto in productos:
-            # Calcular stock total disponible
-            stock_total = sum(
-                stock.cantidad for stock in producto.stocks.filter(
-                    deposito__supermercado=cajero_supermercado,
-                    deposito__activo=True
+            # Calcular stock según el depósito
+            if deposito_empleado:
+                # Stock solo de su depósito
+                stock_total = sum(
+                    stock.cantidad for stock in producto.stocks.filter(
+                        deposito=deposito_empleado
+                    )
                 )
-            )
+            else:
+                # Stock total de todos los depósitos activos del supermercado
+                stock_total = sum(
+                    stock.cantidad for stock in producto.stocks.filter(
+                        deposito__supermercado=cajero_supermercado,
+                        deposito__activo=True
+                    )
+                )
             
             productos_data.append({
                 'id': producto.id,
