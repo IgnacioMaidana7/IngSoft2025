@@ -7,7 +7,8 @@ from .views import (
     SupermercadoLoginView,
     EmpleadoProfileView,
     ProvinciasProxyView,
-    LocalidadesProxyView
+    LocalidadesProxyView,
+    ChangePasswordView
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -28,6 +29,9 @@ urlpatterns = [
     # Perfiles
     path('profile/', UserProfileView.as_view(), name='user_profile'),
     path('empleado/profile/', EmpleadoProfileView.as_view(), name='empleado_profile'),
+    
+    # Cambio de contraseña
+    path('change-password/', ChangePasswordView.as_view(), name='change_password'),
     
     # Proxy para API Georef (resolver CORS)
     path('provincias/', ProvinciasProxyView.as_view(), name='provincias_proxy'),

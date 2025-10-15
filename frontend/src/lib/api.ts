@@ -292,6 +292,75 @@ export async function obtenerPerfilEmpleado(token: string): Promise<EmpleadoAuth
   });
 }
 
+// Funciones para el perfil del administrador
+export interface UserProfile {
+  id: number;
+  email: string;
+  username: string;
+  nombre_supermercado: string;
+  logo?: string;
+  cuil: string;
+  provincia: string;
+  localidad: string;
+  fecha_registro: string;
+  is_active: boolean;
+}
+
+export interface UpdateProfileData {
+  nombre_supermercado?: string;
+  provincia?: string;
+  localidad?: string;
+  logo?: File;
+}
+
+export interface ChangePasswordData {
+  current_password: string;
+  new_password: string;
+  confirm_password: string;
+}
+
+// Obtener perfil del administrador
+export async function obtenerPerfilAdministrador(token: string): Promise<UserProfile> {
+  return apiFetch<UserProfile>('/api/auth/profile/', {
+    method: 'GET',
+    token
+  });
+}
+
+// Actualizar perfil del administrador
+export async function actualizarPerfilAdministrador(token: string, data: UpdateProfileData): Promise<{ message: string; user: UserProfile }> {
+  const formData = new FormData();
+  
+  if (data.nombre_supermercado) {
+    formData.append('nombre_supermercado', data.nombre_supermercado);
+  }
+  if (data.provincia) {
+    formData.append('provincia', data.provincia);
+  }
+  if (data.localidad) {
+    formData.append('localidad', data.localidad);
+  }
+  if (data.logo) {
+    formData.append('logo', data.logo);
+  }
+
+  return apiFetch<{ message: string; user: UserProfile }>('/api/auth/profile/', {
+    method: 'PATCH',
+    body: formData,
+    token,
+    isMultipart: true
+  });
+}
+
+// Cambiar contraseña del administrador
+export async function cambiarContrasena(token: string, data: ChangePasswordData): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>('/api/auth/change-password/', {
+    method: 'POST',
+    body: data,
+    token
+  });
+}
+
 // Funciones para obtener datos geográficos (proxy para API de Georef)
 export interface Provincia {
   id: string;

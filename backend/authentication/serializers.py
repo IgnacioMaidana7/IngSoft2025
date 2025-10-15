@@ -245,3 +245,99 @@ class SupermercadoLoginSerializer(serializers.Serializer):
         raise serializers.ValidationError(
             'Debe incluir "email" y "password".'
         )
+
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    """Serializer para actualizar perfil del usuario (sin cambiar contraseña)"""
+    
+    class Meta:
+        model = User
+        fields = [
+            'nombre_supermercado', 'logo', 'provincia', 'localidad'
+        ]
+    
+    def validate_logo(self, value):
+        """Validar logo si se proporciona"""
+        if value:
+            # Validar extensión
+            if not value.name.lower().endswith(('.jpg', '.jpeg')):
+                raise serializers.ValidationError(
+                    "El logo debe ser un archivo JPG o JPEG"
+                )
+            
+            # Validar tamaño (máximo 1MB)
+            if value.size > 1 * 1024 * 1024:
+                raise serializers.ValidationError(
+                    "El logo no puede ser mayor a 1MB"
+                )
+        
+        return value
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """Serializer para cambiar contraseña del usuario"""
+    
+    current_password = serializers.CharField(write_only=True, required=True)
+    new_password = serializers.CharField(write_only=True, required=True, min_length=8)
+    confirm_password = serializers.CharField(write_only=True, required=True)
+    
+    def validate_current_password(self, value):
+        """Verificar que la contraseña actual sea correcta"""
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("La contraseña actual es incorrecta")
+        return value
+    
+    def validate_new_password(self, value):
+        """Validar nueva contraseña según los criterios especificados"""
+        # Mínimo 8 caracteres
+        if len(value) < 8:
+            raise serializers.ValidationError(
+                "La contraseña debe tener al menos 8 caracteres"
+            )
+        
+        # Debe contener al menos un número
+        if not re.search(r'\d', value):
+            raise serializers.ValidationError(
+                "La contraseña debe contener al menos un número"
+            )
+        
+        # Debe contener al menos un carácter especial
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', value):
+            raise serializers.ValidationError(
+                "La contraseña debe contener al menos un carácter especial"
+            )
+        
+        # Usar validadores de Django
+        try:
+            validate_password(value)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError(e.messages)
+        
+        return value
+    
+    def validate(self, attrs):
+        """Validar que las contraseñas nuevas coincidan"""
+        new_password = attrs.get('new_password')
+        confirm_password = attrs.get('confirm_password')
+        
+        if new_password != confirm_password:
+            raise serializers.ValidationError({
+                'confirm_password': 'Las contraseñas no coinciden'
+            })
+        
+        # Validar que la nueva contraseña sea diferente a la actual
+        current_password = attrs.get('current_password')
+        if new_password == current_password:
+            raise serializers.ValidationError({
+                'new_password': 'La nueva contraseña debe ser diferente a la actual'
+            })
+        
+        return attrs
+    
+    def save(self):
+        """Actualizar contraseña del usuario"""
+        user = self.context['request'].user
+        user.set_password(self.validated_data['new_password'])
+        user.save()
+        return user

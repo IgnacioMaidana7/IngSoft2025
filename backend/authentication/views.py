@@ -1,6 +1,6 @@
 from rest_framework import status, generics, serializers
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -13,7 +13,9 @@ from .serializers import (
     UserSerializer, 
     EmpleadoLoginSerializer,
     EmpleadoUserSerializer,
-    SupermercadoLoginSerializer
+    SupermercadoLoginSerializer,
+    UserProfileUpdateSerializer,
+    ChangePasswordSerializer
 )
 
 
@@ -120,10 +122,71 @@ class RegisterView(generics.CreateAPIView):
 class UserProfileView(generics.RetrieveUpdateAPIView):
     """Vista para obtener y actualizar perfil del usuario"""
     
-    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_serializer_class(self):
+        """Usar diferentes serializers para GET y PUT/PATCH"""
+        if self.request.method == 'GET':
+            return UserSerializer
+        return UserProfileUpdateSerializer
     
     def get_object(self):
+        # Verificar que el usuario autenticado sea un administrador (User, no EmpleadoUser)
+        if isinstance(self.request.user, EmpleadoUser):
+            raise serializers.ValidationError(
+                "Solo los administradores pueden acceder a este endpoint"
+            )
         return self.request.user
+    
+    def update(self, request, *args, **kwargs):
+        """Actualizar perfil del usuario"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        
+        try:
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            
+            # Devolver los datos completos del usuario
+            return Response({
+                'message': 'Perfil actualizado exitosamente',
+                'user': UserSerializer(instance).data
+            }, status=status.HTTP_200_OK)
+        except serializers.ValidationError as e:
+            return Response({
+                'message': 'Error en los datos proporcionados',
+                'errors': e.detail
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ChangePasswordView(APIView):
+    """Vista para cambiar contraseña del usuario"""
+    
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        # Verificar que el usuario autenticado sea un administrador (User, no EmpleadoUser)
+        if isinstance(request.user, EmpleadoUser):
+            return Response({
+                'message': 'Solo los administradores pueden cambiar su contraseña desde aquí'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = ChangePasswordSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                'message': 'Contraseña actualizada exitosamente'
+            }, status=status.HTTP_200_OK)
+        
+        return Response({
+            'message': 'Error al cambiar la contraseña',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class EmpleadoLoginView(APIView):
