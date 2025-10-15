@@ -114,7 +114,7 @@ export default function ProductosPage() {
     }
     
     // Detectar tipo de usuario
-    const userType = localStorage.getItem('userType');
+    const userType = localStorage.getItem('user_type');
     setIsReponedor(userType === 'reponedor');
     
     loadData();
@@ -173,6 +173,15 @@ export default function ProductosPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8">
+        <div className="mb-4">
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="flex items-center text-gray-600 hover:text-gray-900 transition-colors"
+          >
+            <span className="mr-2">←</span>
+            Volver al Dashboard
+          </button>
+        </div>
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Gestión de Productos</h1>
           <button

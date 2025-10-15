@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
-import { registerSupermercado } from "@/lib/api";
+import { registerSupermercado, obtenerProvincias, obtenerLocalidades } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
 export default function RegisterPage() {
@@ -31,14 +31,15 @@ export default function RegisterPage() {
 		}
 		(async () => {
 			try {
-				const res = await fetch('https://apis.datos.gob.ar/georef/api/provincias?campos=id,nombre');
-                const data: { provincias: { id: string; nombre: string }[] } = await res.json();
+				const data = await obtenerProvincias();
                 setProvincias(
                     data.provincias
-                        .map((p: { id: string; nombre: string }) => ({ label: p.nombre, value: String(p.id) }))
-                        .sort((a: { label: string; value: string }, b: { label: string; value: string }) => a.label.localeCompare(b.label))
+                        .map((p) => ({ label: p.nombre, value: String(p.id) }))
+                        .sort((a, b) => a.label.localeCompare(b.label))
                 );
-			} catch {}
+			} catch (error) {
+				console.error('Error al cargar provincias:', error);
+			}
 		})();
     }, [isLoggedIn, router]);
 
@@ -46,23 +47,22 @@ export default function RegisterPage() {
 		if (!provincia) return;
 		(async () => {
 			try {
-				const res = await fetch(`https://apis.datos.gob.ar/georef/api/localidades?provincia=${provincia}&campos=id,nombre&max=1000`);
-                const data: { localidades: { id: string; nombre: string }[] } = await res.json();
+				const data = await obtenerLocalidades(provincia);
                 
                 // Eliminar duplicados usando Set para nombres únicos
                 const uniqueLocalidades = Array.from(
                     new Map(
-                        data.localidades.map((l: { id: string; nombre: string }) => [l.nombre, l])
+                        data.localidades.map((l) => [l.nombre, l])
                     ).values()
                 );
                 
                 setLocalidades(
                     uniqueLocalidades
-                        .map((l: { id: string; nombre: string }) => ({ label: l.nombre, value: String(l.nombre) }))
-                        .sort((a: { label: string; value: string }, b: { label: string; value: string }) => a.label.localeCompare(b.label))
+                        .map((l) => ({ label: l.nombre, value: String(l.nombre) }))
+                        .sort((a, b) => a.label.localeCompare(b.label))
                 );
-			} catch {
-				console.error('Error al cargar localidades');
+			} catch (error) {
+				console.error('Error al cargar localidades:', error);
 				setLocalidades([]);
 			}
 		})();

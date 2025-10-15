@@ -330,13 +330,6 @@ export default function DetalleTransferenciaPage() {
               >
                 {confirmando ? 'Confirmando...' : '✓ Confirmar Transferencia'}
               </button>
-              
-              <button
-                onClick={() => router.push(`/inventario/transferencias/${transferencia.id}/editar`)}
-                className="px-6 py-3 border border-primary text-primary rounded-lg hover:bg-primary hover:text-white transition-colors"
-              >
-                ✏️ Editar
-              </button>
             </div>
           </div>
         )}
