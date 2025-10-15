@@ -1,19 +1,22 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import Container from "@/components/layout/Container";
 import Card from "@/components/layout/Card";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useAuth } from "@/context/AuthContext";
-import { crearOferta, type OfertaCreate } from "@/lib/api";
+import { obtenerOferta, actualizarOferta, type OfertaCreate } from "@/lib/api";
 
-export default function NuevaOfertaPage() {
+export default function EditarOfertaPage() {
   const router = useRouter();
+  const params = useParams();
   const { token } = useAuth();
   const { showToast } = useToast();
+  
+  const ofertaId = parseInt(params.id as string);
   
   // Estado del formulario
   const [formData, setFormData] = useState({
@@ -25,8 +28,42 @@ export default function NuevaOfertaPage() {
     fecha_fin: ''
   });
   
+  const [cargandoOferta, setCargandoOferta] = useState(true);
   const [cargando, setCargando] = useState(false);
   const [errores, setErrores] = useState<Record<string, string>>({});
+  const [puedeEditar, setPuedeEditar] = useState(true);
+
+  // Cargar datos de la oferta
+  useEffect(() => {
+    const cargarOferta = async () => {
+      if (!token || !ofertaId) return;
+      
+      try {
+        setCargandoOferta(true);
+        const oferta = await obtenerOferta(ofertaId, token);
+        
+        // Verificar si puede editar
+        setPuedeEditar(oferta.puede_editar);
+        
+        setFormData({
+          nombre: oferta.nombre,
+          descripcion: oferta.descripcion,
+          tipo_descuento: oferta.tipo_descuento,
+          valor_descuento: oferta.valor_descuento,
+          fecha_inicio: new Date(oferta.fecha_inicio).toISOString().slice(0, 16),
+          fecha_fin: new Date(oferta.fecha_fin).toISOString().slice(0, 16)
+        });
+      } catch (error: any) {
+        console.error('Error cargando oferta:', error);
+        showToast(error.message || 'Error al cargar la oferta', 'error');
+        router.push('/ofertas');
+      } finally {
+        setCargandoOferta(false);
+      }
+    };
+    
+    cargarOferta();
+  }, [token, ofertaId, showToast, router]);
 
   // Validar formulario
   const validarFormulario = (): boolean => {
@@ -78,23 +115,23 @@ export default function NuevaOfertaPage() {
 
   // Submitir formulario
   const handleSubmit = async () => {
-    if (!validarFormulario() || !token) return;
+    if (!validarFormulario() || !token || !puedeEditar) return;
     
     setCargando(true);
     
     try {
-      const ofertaData: OfertaCreate = {
+      const ofertaData: Partial<OfertaCreate> = {
         ...formData,
         valor_descuento: parseFloat(formData.valor_descuento),
         fecha_inicio: new Date(formData.fecha_inicio).toISOString(),
         fecha_fin: new Date(formData.fecha_fin).toISOString()
       };
       
-      const response = await crearOferta(ofertaData, token);
-      showToast(response.message || 'Oferta creada correctamente', 'success');
+      const response = await actualizarOferta(ofertaId, ofertaData, token);
+      showToast(response.message || 'Oferta actualizada correctamente', 'success');
       router.push('/ofertas');
     } catch (error: any) {
-      console.error('Error creando oferta:', error);
+      console.error('Error actualizando oferta:', error);
       
       if (error.message.includes(':')) {
         // Es un error de validación del backend
@@ -111,23 +148,48 @@ export default function NuevaOfertaPage() {
         setErrores(nuevosErrores);
         showToast('Por favor corrige los errores en el formulario', 'error');
       } else {
-        showToast(error.message || 'Error al crear la oferta', 'error');
+        showToast(error.message || 'Error al actualizar la oferta', 'error');
       }
     } finally {
       setCargando(false);
     }
   };
 
-  // Por ahora simplemente verificamos que tenga token (está autenticado)
-  // En una implementación completa, verificaríamos el tipo de usuario
+  if (cargandoOferta) {
+    return (
+      <Container>
+        <Card>
+          <div className="text-center p-8">
+            <p className="text-lightText">Cargando oferta...</p>
+          </div>
+        </Card>
+      </Container>
+    );
+  }
+
+  if (!puedeEditar) {
+    return (
+      <Container>
+        <Card>
+          <div className="text-center p-8">
+            <h2 className="text-xl font-semibold text-text mb-2">Oferta No Editable</h2>
+            <p className="text-lightText">Esta oferta no puede ser editada porque ya ha expirado.</p>
+            <Button onClick={() => router.push('/ofertas')} className="mt-4">
+              Volver a Ofertas
+            </Button>
+          </div>
+        </Card>
+      </Container>
+    );
+  }
 
   return (
     <ProtectedRoute>
       <Container>
         <Card className="bg-background text-text p-5">
           <div className="mb-6">
-            <h1 className="text-2xl font-bold mb-2">Crear Nueva Oferta</h1>
-            <p className="text-lightText">Complete los datos para crear una nueva oferta promocional</p>
+            <h1 className="text-2xl font-bold mb-2">Editar Oferta</h1>
+            <p className="text-lightText">Modifica los datos de la oferta promocional</p>
           </div>
 
           <div className="space-y-4">
@@ -207,7 +269,6 @@ export default function NuevaOfertaPage() {
                   className="w-full px-3 py-3 border border-border rounded-xl"
                   value={formData.fecha_inicio}
                   onChange={(e) => handleChange('fecha_inicio', e.target.value)}
-                  min={new Date().toISOString().slice(0, 16)}
                 />
                 {errores.fecha_inicio && <p className="text-red-500 text-sm mt-1">{errores.fecha_inicio}</p>}
               </div>
@@ -219,7 +280,7 @@ export default function NuevaOfertaPage() {
                   className="w-full px-3 py-3 border border-border rounded-xl"
                   value={formData.fecha_fin}
                   onChange={(e) => handleChange('fecha_fin', e.target.value)}
-                  min={formData.fecha_inicio || new Date().toISOString().slice(0, 16)}
+                  min={formData.fecha_inicio}
                 />
                 {errores.fecha_fin && <p className="text-red-500 text-sm mt-1">{errores.fecha_fin}</p>}
               </div>
@@ -233,11 +294,11 @@ export default function NuevaOfertaPage() {
               disabled={cargando}
               className="flex-1"
             >
-              {cargando ? 'Creando...' : 'Crear Oferta'}
+              {cargando ? 'Actualizando...' : 'Actualizar Oferta'}
             </Button>
             <Button 
               variant="secondary" 
-              onClick={() => router.back()}
+              onClick={() => router.push('/ofertas')}
               disabled={cargando}
             >
               Cancelar
@@ -248,5 +309,3 @@ export default function NuevaOfertaPage() {
     </ProtectedRoute>
   );
 }
-
-

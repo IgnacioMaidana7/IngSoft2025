@@ -507,7 +507,23 @@ export default function VentasPage() {
 										<div className="flex-1">
 											<div className="font-medium">{item.producto_nombre}</div>
 											<div className="text-sm text-gray-600">
-												${item.precio_unitario} c/u
+												{item.precio_original ? (
+													<>
+														<span className="line-through text-gray-400 mr-2">
+															${item.precio_original}
+														</span>
+														<span className="text-green-600 font-semibold">
+															${item.precio_unitario} c/u
+														</span>
+														{item.oferta_nombre && (
+															<div className="text-xs text-green-600 mt-1">
+																🎉 {item.oferta_nombre}
+															</div>
+														)}
+													</>
+												) : (
+													<span>${item.precio_unitario} c/u</span>
+												)}
 											</div>
 										</div>
 										

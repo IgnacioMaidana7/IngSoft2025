@@ -178,6 +178,33 @@ class ItemVenta(models.Model):
         help_text="Precio del producto al momento de la venta"
     )
     
+    precio_original = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name="Precio Original",
+        help_text="Precio original sin descuento (si aplica oferta)"
+    )
+    
+    descuento_aplicado = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name="Descuento Aplicado",
+        help_text="Monto de descuento aplicado por oferta"
+    )
+    
+    oferta_nombre = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        verbose_name="Nombre de la Oferta",
+        help_text="Nombre de la oferta aplicada (si hay)"
+    )
+    
     subtotal = models.DecimalField(
         max_digits=10,
         decimal_places=2,

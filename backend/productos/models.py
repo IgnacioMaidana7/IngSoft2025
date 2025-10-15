@@ -57,6 +57,46 @@ class Producto(models.Model):
         
     def __str__(self):
         return self.nombre
+    
+    def tiene_ofertas_activas(self):
+        """Verifica si el producto tiene ofertas activas"""
+        from django.utils import timezone
+        from ofertas.models import ProductoOferta
+        
+        return ProductoOferta.objects.filter(
+            producto=self,
+            oferta__activo=True,
+            oferta__fecha_inicio__lte=timezone.now(),
+            oferta__fecha_fin__gte=timezone.now()
+        ).exists()
+    
+    def get_precio_con_descuento(self):
+        """Obtiene el precio más bajo con descuentos activos"""
+        from django.utils import timezone
+        from ofertas.models import ProductoOferta
+        
+        ofertas_activas = ProductoOferta.objects.filter(
+            producto=self,
+            oferta__activo=True,
+            oferta__fecha_inicio__lte=timezone.now(),
+            oferta__fecha_fin__gte=timezone.now()
+        ).order_by('precio_con_descuento')
+        
+        if ofertas_activas.exists():
+            return ofertas_activas.first().precio_con_descuento
+        return self.precio
+    
+    def get_mejor_oferta(self):
+        """Obtiene la mejor oferta activa (mayor descuento)"""
+        from django.utils import timezone
+        from ofertas.models import ProductoOferta
+        
+        return ProductoOferta.objects.filter(
+            producto=self,
+            oferta__activo=True,
+            oferta__fecha_inicio__lte=timezone.now(),
+            oferta__fecha_fin__gte=timezone.now()
+        ).order_by('precio_con_descuento').first()
 
 class ProductoDeposito(models.Model):
     """Modelo para gestionar el stock de productos en diferentes depósitos"""
