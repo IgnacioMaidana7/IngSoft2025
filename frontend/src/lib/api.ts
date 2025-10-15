@@ -567,10 +567,37 @@ export async function obtenerRolesDisponibles(token: string): Promise<{ roles: R
 }
 
 export async function obtenerEstadisticasEmpleados(token: string): Promise<EstadisticasEmpleados> {
-  return apiFetch<EstadisticasEmpleados>('/api/empleados/estadisticas/', {
+  const response = await apiFetch<{
+    success: boolean;
+    data: {
+      total_empleados: number;
+      empleados_activos: number;
+      empleados_inactivos: number;
+      empleados_por_puesto: Array<{ puesto: string; total: number }>;
+      empleados_por_deposito: Array<{ id: number; nombre: string; total_empleados: number }>;
+    };
+  }>('/api/empleados/estadisticas/', {
     method: 'GET',
     token
   });
+  
+  // Transformar empleados_por_puesto de array a objeto
+  const empleadosPorPuesto: Record<string, number> = {};
+  response.data.empleados_por_puesto.forEach(item => {
+    empleadosPorPuesto[item.puesto] = item.total;
+  });
+  
+  // Transformar empleados_por_deposito de array a objeto
+  const empleadosPorDeposito: Record<string, number> = {};
+  response.data.empleados_por_deposito.forEach(item => {
+    empleadosPorDeposito[item.nombre] = item.total_empleados;
+  });
+  
+  return {
+    total_empleados: response.data.total_empleados,
+    empleados_por_puesto: empleadosPorPuesto,
+    empleados_por_deposito: empleadosPorDeposito,
+  };
 }
 
 // === INTERFACES PARA PRODUCTOS ===
