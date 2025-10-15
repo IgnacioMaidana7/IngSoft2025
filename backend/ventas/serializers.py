@@ -17,14 +17,32 @@ def obtener_supermercado_usuario(user):
 
 class ItemVentaSerializer(serializers.ModelSerializer):
     producto_nombre = serializers.CharField(source='producto.nombre', read_only=True)
+    tiene_descuento = serializers.SerializerMethodField()
+    porcentaje_descuento = serializers.SerializerMethodField()
     
     class Meta:
         model = ItemVenta
         fields = [
             'id', 'producto', 'producto_nombre', 'cantidad', 
-            'precio_unitario', 'subtotal', 'fecha_agregado'
+            'precio_unitario', 'precio_original', 'descuento_aplicado',
+            'oferta_nombre', 'tiene_descuento', 'porcentaje_descuento',
+            'subtotal', 'fecha_agregado'
         ]
-        read_only_fields = ['id', 'subtotal', 'fecha_agregado', 'producto_nombre']
+        read_only_fields = [
+            'id', 'subtotal', 'fecha_agregado', 'producto_nombre',
+            'precio_original', 'descuento_aplicado', 'oferta_nombre',
+            'tiene_descuento', 'porcentaje_descuento'
+        ]
+    
+    def get_tiene_descuento(self, obj):
+        """Indica si el item tiene un descuento aplicado"""
+        return obj.descuento_aplicado > 0
+    
+    def get_porcentaje_descuento(self, obj):
+        """Calcula el porcentaje de descuento si aplica"""
+        if obj.precio_original and obj.precio_original > 0:
+            return round((obj.descuento_aplicado / obj.precio_original) * 100, 2)
+        return 0
     
     def validate(self, data):
         """Validaciones personalizadas para el item de venta"""

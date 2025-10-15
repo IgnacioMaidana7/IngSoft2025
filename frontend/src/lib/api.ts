@@ -910,6 +910,11 @@ export interface ItemVenta {
   producto_nombre: string;
   cantidad: number;
   precio_unitario: string;
+  precio_original?: string;
+  descuento_aplicado?: string;
+  oferta_nombre?: string;
+  tiene_descuento?: boolean;
+  porcentaje_descuento?: number;
   subtotal: string;
   fecha_agregado: string;
 }
@@ -1219,6 +1224,218 @@ export async function verificarApiReconocimiento(token: string): Promise<{ succe
 // Obtener catálogo de productos reconocibles
 export async function obtenerCatalogoReconocimiento(token: string): Promise<any> {
   return apiFetch<any>('/api/productos/catalogo-reconocimiento/', {
+    method: 'GET',
+    token
+  });
+}
+
+// === OFERTAS ===
+export interface Oferta {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  tipo_descuento: 'porcentaje' | 'monto_fijo';
+  valor_descuento: string;
+  fecha_inicio: string;
+  fecha_fin: string;
+  activo: boolean;
+  fecha_creacion: string;
+  fecha_modificacion: string;
+  estado: 'proxima' | 'activa' | 'expirada';
+  puede_editar: boolean;
+}
+
+export interface OfertaCreate {
+  nombre: string;
+  descripcion: string;
+  tipo_descuento: 'porcentaje' | 'monto_fijo';
+  valor_descuento: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+}
+
+export interface OfertaList {
+  id: number;
+  nombre: string;
+  tipo_descuento: 'porcentaje' | 'monto_fijo';
+  tipo_descuento_display: string;
+  valor_descuento: string;
+  fecha_inicio: string;
+  fecha_fin: string;
+  estado: 'proxima' | 'activa' | 'expirada';
+  puede_editar: boolean;
+  activo: boolean;
+}
+
+export interface EstadisticasOfertas {
+  total: number;
+  activas: number;
+  proximas: number;
+  expiradas: number;
+}
+
+// Obtener todas las ofertas
+export async function obtenerOfertas(
+  token: string,
+  page?: number,
+  filters?: {
+    estado?: 'proxima' | 'activa' | 'expirada';
+    tipo_descuento?: 'porcentaje' | 'monto_fijo';
+    activo?: boolean;
+  }
+): Promise<PaginatedResponse<OfertaList>> {
+  let url = '/api/ofertas/api/ofertas/';
+  const params = new URLSearchParams();
+  
+  if (page) params.append('page', page.toString());
+  if (filters?.estado) params.append('estado', filters.estado);
+  if (filters?.tipo_descuento) params.append('tipo_descuento', filters.tipo_descuento);
+  if (filters?.activo !== undefined) params.append('activo', filters.activo.toString());
+  
+  if (params.toString()) {
+    url += `?${params.toString()}`;
+  }
+  
+  const response = await apiFetch<PaginatedResponse<OfertaList>>(url, {
+    method: 'GET',
+    token
+  });
+  
+  return {
+    ...response,
+    results: response.results || (response as unknown as OfertaList[])
+  };
+}
+
+// Obtener una oferta específica
+export async function obtenerOferta(id: number, token: string): Promise<Oferta> {
+  return apiFetch<Oferta>(`/api/ofertas/api/ofertas/${id}/`, {
+    method: 'GET',
+    token
+  });
+}
+
+// Crear nueva oferta
+export async function crearOferta(data: OfertaCreate, token: string): Promise<{message: string; data: Oferta}> {
+  return apiFetch<{message: string; data: Oferta}>('/api/ofertas/api/ofertas/', {
+    method: 'POST',
+    body: data,
+    token
+  });
+}
+
+// Actualizar oferta existente
+export async function actualizarOferta(id: number, data: Partial<OfertaCreate>, token: string): Promise<{message: string; data: Oferta}> {
+  return apiFetch<{message: string; data: Oferta}>(`/api/ofertas/api/ofertas/${id}/`, {
+    method: 'PUT',
+    body: data,
+    token
+  });
+}
+
+// Eliminar oferta
+export async function eliminarOferta(id: number, token: string): Promise<{message: string}> {
+  return apiFetch<{message: string}>(`/api/ofertas/api/ofertas/${id}/`, {
+    method: 'DELETE',
+    token
+  });
+}
+
+// Activar/desactivar oferta
+export async function toggleActivarOferta(id: number, token: string): Promise<{message: string; activo: boolean}> {
+  return apiFetch<{message: string; activo: boolean}>(`/api/ofertas/api/ofertas/${id}/activar_desactivar/`, {
+    method: 'POST',
+    token
+  });
+}
+
+// Obtener estadísticas de ofertas
+export async function obtenerEstadisticasOfertas(token: string): Promise<EstadisticasOfertas> {
+  return apiFetch<EstadisticasOfertas>('/api/ofertas/api/ofertas/estadisticas/', {
+    method: 'GET',
+    token
+  });
+}
+
+// === PRODUCTOS CON OFERTAS ===
+export interface ProductoOferta {
+  id: number;
+  producto: number;
+  producto_nombre: string;
+  producto_categoria: string;
+  oferta: number;
+  oferta_nombre: string;
+  precio_original: string;
+  precio_con_descuento: string;
+  descuento_aplicado: number;
+  porcentaje_descuento: number;
+  fecha_asignacion: string;
+}
+
+export interface ProductoConOferta {
+  id: number;
+  nombre: string;
+  categoria: string;
+  precio: string;
+  tiene_ofertas_activas: boolean;
+  precio_con_descuento: string;
+  mejor_oferta: ProductoOferta | null;
+  ofertas_aplicadas: ProductoOferta[];
+}
+
+// Obtener productos con información de ofertas
+export async function obtenerProductosConOfertas(
+  token: string,
+  filters?: {
+    categoria?: number;
+    estado_oferta?: 'con_oferta' | 'sin_oferta';
+  }
+): Promise<ProductoConOferta[]> {
+  let url = '/api/ofertas/api/producto-ofertas/productos_con_ofertas/';
+  const params = new URLSearchParams();
+  
+  if (filters?.categoria) params.append('categoria', filters.categoria.toString());
+  if (filters?.estado_oferta) params.append('estado_oferta', filters.estado_oferta);
+  
+  if (params.toString()) {
+    url += `?${params.toString()}`;
+  }
+  
+  return apiFetch<ProductoConOferta[]>(url, {
+    method: 'GET',
+    token
+  });
+}
+
+// Asignar productos a una oferta
+export async function asignarProductosAOferta(
+  ofertaId: number,
+  productosIds: number[],
+  token: string
+): Promise<{message: string; asignaciones: ProductoOferta[]; errores?: string[]}> {
+  return apiFetch<{message: string; asignaciones: ProductoOferta[]; errores?: string[]}>(`/api/ofertas/api/ofertas/${ofertaId}/asignar_productos/`, {
+    method: 'POST',
+    body: { productos_ids: productosIds },
+    token
+  });
+}
+
+// Quitar productos de una oferta
+export async function quitarProductosDeOferta(
+  ofertaId: number,
+  productosIds: number[],
+  token: string
+): Promise<{message: string}> {
+  return apiFetch<{message: string}>(`/api/ofertas/api/ofertas/${ofertaId}/quitar_productos/`, {
+    method: 'POST',
+    body: { productos_ids: productosIds },
+    token
+  });
+}
+
+// Obtener productos asociados a una oferta
+export async function obtenerProductosDeOferta(ofertaId: number, token: string): Promise<ProductoOferta[]> {
+  return apiFetch<ProductoOferta[]>(`/api/ofertas/api/ofertas/${ofertaId}/productos/`, {
     method: 'GET',
     token
   });

@@ -107,12 +107,31 @@ class VentaViewSet(ModelViewSet):
                     item_existente.save()
                     item = item_existente
                 else:
-                    # Crear nuevo item
+                    # Verificar si hay oferta activa
+                    mejor_oferta = producto.get_mejor_oferta()
+                    
+                    if mejor_oferta:
+                        # Aplicar precio con descuento
+                        precio_venta = mejor_oferta.precio_con_descuento
+                        precio_original = producto.precio
+                        descuento = precio_original - precio_venta
+                        oferta_nombre = mejor_oferta.oferta.nombre
+                    else:
+                        # Precio normal sin oferta
+                        precio_venta = producto.precio
+                        precio_original = None
+                        descuento = Decimal('0.00')
+                        oferta_nombre = None
+                    
+                    # Crear nuevo item con información de oferta
                     item = ItemVenta.objects.create(
                         venta=venta,
                         producto=producto,
                         cantidad=cantidad,
-                        precio_unitario=producto.precio
+                        precio_unitario=precio_venta,
+                        precio_original=precio_original,
+                        descuento_aplicado=descuento,
+                        oferta_nombre=oferta_nombre
                     )
                 
                 # Cambiar estado a PROCESANDO si está PENDIENTE
