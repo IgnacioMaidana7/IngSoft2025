@@ -1,7 +1,8 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
-from authentication.permissions import IsCajeroOrAdmin
+from authentication.permissions import IsCajeroOrAdmin, IsReponedorOrAdmin
+from rest_framework.permissions import IsAuthenticated
 import requests
 import base64
 from django.conf import settings
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 RECOGNITION_API_URL = getattr(settings, 'RECOGNITION_API_URL', 'http://localhost:8080')
 
 @api_view(['POST'])
-@permission_classes([IsCajeroOrAdmin])
+@permission_classes([IsAuthenticated])
 def reconocer_productos_imagen(request):
     """
     Recibe una imagen del frontend y la envía a la API de reconocimiento.
@@ -206,7 +207,7 @@ def reconocer_productos_imagen(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsCajeroOrAdmin])
+@permission_classes([IsAuthenticated])
 def obtener_catalogo_reconocimiento(request):
     """
     Obtiene el catálogo de productos reconocibles desde la API.
@@ -231,7 +232,7 @@ def obtener_catalogo_reconocimiento(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsCajeroOrAdmin])
+@permission_classes([IsAuthenticated])
 def verificar_api_reconocimiento(request):
     """
     Verifica el estado de la API de reconocimiento.

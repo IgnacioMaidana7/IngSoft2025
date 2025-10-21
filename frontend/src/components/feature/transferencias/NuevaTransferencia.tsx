@@ -13,11 +13,36 @@ import type {
 import Container from '@/components/layout/Container';
 import Card from '@/components/layout/Card';
 import Button from '@/components/ui/Button';
+import CameraCapture from '@/components/CameraCapture';
+import { useToast } from '@/components/feedback/ToastProvider';
+import type { ProductoDetectado, ReconocimientoResponse } from '@/lib/api';
 import { COLORS } from '@/constants/colors';
 
 export default function NuevaTransferenciaPage() {
   const router = useRouter();
   const { token } = useAuth();
+  const { showToast } = useToast();
+  
+  // Obtener información del empleado si es reponedor
+  const [empleadoInfo, setEmpleadoInfo] = useState<{
+    puesto: string;
+    deposito_id: number | null;
+    deposito_nombre: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const info = localStorage.getItem('empleado_info');
+      if (info) {
+        const parsed = JSON.parse(info);
+        setEmpleadoInfo({
+          puesto: parsed.puesto,
+          deposito_id: parsed.deposito_id,
+          deposito_nombre: parsed.deposito_nombre
+        });
+      }
+    }
+  }, []);
   
   const [form, setForm] = useState<TransferenciaForm>({
     deposito_origen: '',
@@ -32,6 +57,13 @@ export default function NuevaTransferenciaPage() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<TransferenciaFormErrors>({});
   const [step, setStep] = useState(1); // 1: configuración, 2: productos
+  
+  // Estados para reconocimiento de productos
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  const [reconociendo, setReconociendo] = useState(false);
+  const [productosDetectados, setProductosDetectados] = useState<ProductoDetectado[]>([]);
+  const [mostrarProductosDetectados, setMostrarProductosDetectados] = useState(false);
+  const [cantidadesDetectados, setCantidadesDetectados] = useState<{ [key: number]: number }>({});
 
   const cargarDepositos = useCallback(async () => {
     if (!token) return;
@@ -74,6 +106,16 @@ export default function NuevaTransferenciaPage() {
   useEffect(() => {
     cargarDepositos();
   }, [cargarDepositos]);
+
+  // Auto-seleccionar depósito de origen si es reponedor
+  useEffect(() => {
+    if (empleadoInfo?.puesto === 'REPONEDOR' && empleadoInfo.deposito_id) {
+      setForm(prev => ({
+        ...prev,
+        deposito_origen: empleadoInfo.deposito_id!
+      }));
+    }
+  }, [empleadoInfo]);
 
   useEffect(() => {
     if (form.deposito_origen && typeof form.deposito_origen === 'number') {
@@ -258,6 +300,150 @@ export default function NuevaTransferenciaPage() {
            form.fecha_transferencia;
   };
 
+  // Función para manejar el reconocimiento de productos desde la foto
+  const handlePhotoUploaded = async (resultadoReconocimiento: ReconocimientoResponse) => {
+    if (!token) {
+      showToast("No hay sesión activa", "error");
+      return;
+    }
+    
+    try {
+      setReconociendo(true);
+      setIsCameraModalOpen(false);
+      showToast("🔍 Procesando productos reconocidos...", "info");
+      
+      console.log("📸 Resultado del reconocimiento recibido:", resultadoReconocimiento);
+      
+      if (resultadoReconocimiento.success && resultadoReconocimiento.productos && resultadoReconocimiento.productos.length > 0) {
+        // Filtrar solo productos que existen en la BD y están disponibles en el depósito origen
+        const productosValidos = resultadoReconocimiento.productos.filter(
+          (p: ProductoDetectado) => p.existe_en_bd && p.ingsoft_product_id
+        );
+        
+        if (productosValidos.length === 0) {
+          showToast(
+            "No se detectaron productos registrados en el sistema",
+            "info"
+          );
+          setReconociendo(false);
+          return;
+        }
+        
+        // Inicializar cantidades en 1 para cada producto detectado
+        const cantidadesIniciales: { [key: number]: number } = {};
+        productosValidos.forEach((producto: ProductoDetectado) => {
+          if (producto.ingsoft_product_id) {
+            cantidadesIniciales[producto.ingsoft_product_id] = 1;
+          }
+        });
+        
+        setProductosDetectados(productosValidos);
+        setCantidadesDetectados(cantidadesIniciales);
+        setMostrarProductosDetectados(true);
+        
+        showToast(
+          `✅ Se detectaron ${productosValidos.length} producto(s)`,
+          "success"
+        );
+      } else {
+        showToast(
+          resultadoReconocimiento.error || "No se detectaron productos en la imagen",
+          "info"
+        );
+      }
+    } catch (error) {
+      console.error('❌ Error en reconocimiento de productos:', error);
+      
+      let errorMessage = "Error al reconocer productos";
+      
+      if (error instanceof Error) {
+        if (error.message.includes("HTTP 500")) {
+          errorMessage = "Error del servidor al procesar la imagen. Verifica los logs del backend.";
+        } else if (error.message.includes("HTTP 503") || error.message.includes("HTTP 504")) {
+          errorMessage = "El servidor de reconocimiento no está disponible. Verifica que esté corriendo en puerto 8080.";
+        } else if (error.message.includes("HTTP 400")) {
+          errorMessage = "Error en los datos enviados. Verifica el formato de la imagen.";
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      showToast(errorMessage, "error");
+    } finally {
+      setReconociendo(false);
+    }
+  };
+
+  // Confirmar productos detectados y agregarlos a la transferencia
+  const confirmarProductosDetectados = async () => {
+    try {
+      setLoading(true);
+      let productosAgregados = 0;
+      
+      for (const productoDetectado of productosDetectados) {
+        if (productoDetectado.ingsoft_product_id) {
+          const cantidad = cantidadesDetectados[productoDetectado.ingsoft_product_id] || 1;
+          
+          // Buscar el producto en la lista de disponibles
+          const productoDisponible = productosDisponibles.find(
+            p => p.value === productoDetectado.ingsoft_product_id
+          );
+          
+          if (productoDisponible) {
+            // Agregar el producto al detalle de la transferencia
+            const nuevoDetalle: DetalleTransferenciaForm = {
+              producto: productoDetectado.ingsoft_product_id,
+              cantidad: cantidad,
+              producto_nombre: productoDetectado.nombre_db || '',
+              stock_disponible: productoDisponible.stock_disponible
+            };
+            
+            setForm(prev => ({
+              ...prev,
+              detalles: [...prev.detalles, nuevoDetalle]
+            }));
+            
+            productosAgregados++;
+          }
+        }
+      }
+      
+      if (productosAgregados > 0) {
+        showToast(
+          `${productosAgregados} producto(s) agregado(s) a la transferencia`,
+          "success"
+        );
+      }
+      
+      // Limpiar estado de detección
+      setMostrarProductosDetectados(false);
+      setProductosDetectados([]);
+      setCantidadesDetectados({});
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Error al agregar productos";
+      showToast(errorMessage, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Cancelar detección de productos
+  const cancelarProductosDetectados = () => {
+    setMostrarProductosDetectados(false);
+    setProductosDetectados([]);
+    setCantidadesDetectados({});
+    showToast("Detección cancelada", "info");
+  };
+
+  // Actualizar cantidad de un producto detectado
+  const actualizarCantidadDetectado = (productoId: number, nuevaCantidad: number) => {
+    if (nuevaCantidad < 1) return;
+    setCantidadesDetectados(prev => ({
+      ...prev,
+      [productoId]: nuevaCantidad
+    }));
+  };
+
   if (step === 1) {
     return (
       <Container>
@@ -277,18 +463,25 @@ export default function NuevaTransferenciaPage() {
               <label className="block mb-2 font-semibold" style={{ color: COLORS.text }}>
                 Depósito Origen *
               </label>
-              <select 
-                className="w-full px-4 py-3 border border-border rounded-xl"
-                value={form.deposito_origen}
-                onChange={(e) => handleInputChange('deposito_origen', Number(e.target.value) || '')}
-              >
-                <option value="">Selecciona un depósito</option>
-                {depositos.map(deposito => (
-                  <option key={deposito.value} value={deposito.value}>
-                    {deposito.label} - {deposito.direccion}
-                  </option>
-                ))}
-              </select>
+              {empleadoInfo?.puesto === 'REPONEDOR' && empleadoInfo.deposito_id ? (
+                <div className="w-full px-4 py-3 border border-border rounded-xl bg-gray-100">
+                  {empleadoInfo.deposito_nombre}
+                  <span className="ml-2 text-sm text-gray-500">(Tu depósito asignado)</span>
+                </div>
+              ) : (
+                <select 
+                  className="w-full px-4 py-3 border border-border rounded-xl"
+                  value={form.deposito_origen}
+                  onChange={(e) => handleInputChange('deposito_origen', Number(e.target.value) || '')}
+                >
+                  <option value="">Selecciona un depósito</option>
+                  {depositos.map(deposito => (
+                    <option key={deposito.value} value={deposito.value}>
+                      {deposito.label} - {deposito.direccion}
+                    </option>
+                  ))}
+                </select>
+              )}
               {errors.deposito_origen && (
                 <p className="text-red-500 text-sm mt-1">{errors.deposito_origen[0]}</p>
               )}
@@ -401,13 +594,24 @@ export default function NuevaTransferenciaPage() {
             <h3 className="text-lg font-semibold" style={{ color: COLORS.text }}>
               Productos a Transferir
             </h3>
-            <button
-              type="button"
-              onClick={agregarProducto}
-              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-            >
-              + Agregar Producto
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCameraModalOpen(true)}
+                disabled={!form.deposito_origen || reconociendo}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+                title="Reconocer productos con foto"
+              >
+                📸 Foto
+              </button>
+              <button
+                type="button"
+                onClick={agregarProducto}
+                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+              >
+                + Agregar Producto
+              </button>
+            </div>
           </div>
 
           {form.detalles.length === 0 ? (
@@ -506,6 +710,164 @@ export default function NuevaTransferenciaPage() {
             </Button>
           </div>
         </form>
+
+        {/* Modal de Cámara */}
+        {isCameraModalOpen && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold">Capturar Productos</h3>
+                <Button 
+                  variant="secondary" 
+                  onClick={() => setIsCameraModalOpen(false)}
+                >
+                  ✕
+                </Button>
+              </div>
+              
+              <div className="mb-4">
+                <p className="text-sm text-gray-600">
+                  Usa la cámara para tomar una foto de los productos que deseas transferir. 
+                  La imagen será procesada para reconocer los productos.
+                </p>
+              </div>
+
+              <CameraCapture onUploaded={handlePhotoUploaded} />
+              
+              <div className="mt-4 flex justify-end">
+                <Button 
+                  variant="secondary" 
+                  onClick={() => setIsCameraModalOpen(false)}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Reconocimiento en Proceso */}
+        {reconociendo && (
+          <div className="fixed inset-0 bg-black/70 grid place-items-center z-50">
+            <div className="bg-white rounded-2xl p-8 w-[360px] max-w-[90%] text-center">
+              <div className="mb-4">
+                <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+              </div>
+              <h3 className="font-bold text-lg mb-2">Analizando imagen...</h3>
+              <p className="text-gray-600">
+                Detectando productos en la fotografía
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Productos Detectados */}
+        {mostrarProductosDetectados && (
+          <div className="fixed inset-0 bg-black/50 grid place-items-center z-50 p-4 overflow-y-auto">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <h3 className="font-bold text-xl mb-4 text-center">
+                🎯 Productos Detectados
+              </h3>
+              <p className="text-center text-gray-600 mb-4">
+                Se detectaron {productosDetectados.length} producto(s). 
+                Ajusta las cantidades y confirma para agregarlos a la transferencia.
+              </p>
+
+              <div className="space-y-3 mb-6">
+                {productosDetectados.map((producto) => {
+                  const productoId = producto.ingsoft_product_id!;
+                  const cantidad = cantidadesDetectados[productoId] || 1;
+                  const productoDisponible = productosDisponibles.find(p => p.value === productoId);
+                  
+                  return (
+                    <div key={productoId} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <div className="font-bold text-lg">{producto.nombre_db}</div>
+                          <div className="text-sm text-gray-600">
+                            {producto.categoria_db}
+                          </div>
+                          {productoDisponible && (
+                            <div className={`text-xs mt-1 ${
+                              (productoDisponible.stock_disponible ?? 0) < 10 ? 'text-orange-600' : 'text-blue-600'
+                            }`}>
+                              Stock disponible: {productoDisponible.stock_disponible} unidades
+                              {(productoDisponible.stock_disponible ?? 0) < 10 && ' (⚠️ Stock bajo)'}
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="ml-4">
+                          <div className="text-xs text-gray-500 mb-1">Confianza</div>
+                          <div className="text-sm font-medium">
+                            {Math.round((producto.classification_confidence || producto.confidence || 0) * 100)}%
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Control de cantidad */}
+                      <div className="flex items-center justify-between bg-white rounded-lg p-2 border border-gray-300">
+                        <span className="text-sm font-medium">Cantidad:</span>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold hover:bg-red-200 transition-colors"
+                            onClick={() => actualizarCantidadDetectado(productoId, cantidad - 1)}
+                          >
+                            -
+                          </button>
+                          <span className="w-12 text-center font-bold text-lg">
+                            {cantidad}
+                          </span>
+                          <button
+                            type="button"
+                            className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center font-bold hover:bg-green-200 transition-colors"
+                            onClick={() => actualizarCantidadDetectado(productoId, cantidad + 1)}
+                            disabled={productoDisponible !== undefined && cantidad >= (productoDisponible.stock_disponible ?? 0)}
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Total de productos detectados */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold text-lg">Total de productos:</span>
+                  <span className="font-bold text-2xl text-primary">
+                    {productosDetectados.reduce((sum, p) => {
+                      const cantidad = cantidadesDetectados[p.ingsoft_product_id!] || 1;
+                      return sum + cantidad;
+                    }, 0)} unidades
+                  </span>
+                </div>
+              </div>
+
+              {/* Botones de acción */}
+              <div className="flex gap-3">
+                <Button 
+                  variant="secondary" 
+                  onClick={cancelarProductosDetectados}
+                  className="flex-1"
+                  disabled={loading}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={confirmarProductosDetectados}
+                  className="flex-1"
+                  disabled={loading}
+                >
+                  {loading ? "Agregando..." : "Confirmar y Agregar"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </Card>
     </Container>
   );

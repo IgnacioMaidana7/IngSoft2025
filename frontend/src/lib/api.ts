@@ -151,6 +151,7 @@ export interface ProductoDetectado {
   ingsoft_product_id?: number;
   nombre?: string;
   confidence?: number;
+  classification_confidence?: number;
   bounding_box?: number[];
   nombre_db?: string;
   categoria_db?: string;
@@ -270,6 +271,8 @@ export interface EmpleadoAuthResponse {
     dni: string;
     puesto: 'CAJERO' | 'REPONEDOR';
     supermercado_nombre: string;
+    deposito_id: number | null;
+    deposito_nombre: string | null;
     fecha_registro: string;
     is_active: boolean;
   };

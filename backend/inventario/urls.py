@@ -17,6 +17,7 @@ urlpatterns = [
     path('transferencias/', views.TransferenciaListCreateView.as_view(), name='transferencia-list-create'),
     path('transferencias/<int:pk>/', views.TransferenciaDetailView.as_view(), name='transferencia-detail'),
     path('transferencias/<int:transferencia_id>/confirmar/', views.confirmar_transferencia, name='confirmar-transferencia'),
+    path('transferencias/<int:transferencia_id>/cancelar/', views.cancelar_transferencia, name='cancelar-transferencia'),
     path('transferencias/<int:transferencia_id>/remito/', views.generar_remito_pdf, name='generar-remito'),
     
     # URLs para historial de movimientos

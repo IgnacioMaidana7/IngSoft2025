@@ -65,7 +65,9 @@ export default function LoginPage() {
           puesto: empleadoResponse.user.puesto,
           supermercado_nombre: empleadoResponse.user.supermercado_nombre,
           dni: empleadoResponse.user.dni,
-          email: empleadoResponse.user.email
+          email: empleadoResponse.user.email,
+          deposito_id: empleadoResponse.user.deposito_id,
+          deposito_nombre: empleadoResponse.user.deposito_nombre
         }));
       }
       

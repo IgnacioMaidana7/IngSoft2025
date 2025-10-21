@@ -195,14 +195,35 @@ class EmpleadoUserSerializer(serializers.ModelSerializer):
     
     nombre_completo = serializers.CharField(source='get_nombre_completo', read_only=True)
     supermercado_nombre = serializers.CharField(source='supermercado.nombre_supermercado', read_only=True)
+    deposito_id = serializers.SerializerMethodField()
+    deposito_nombre = serializers.SerializerMethodField()
     
     class Meta:
         model = EmpleadoUser
         fields = [
             'id', 'email', 'nombre', 'apellido', 'nombre_completo', 
-            'dni', 'puesto', 'supermercado_nombre', 'fecha_registro', 'is_active'
+            'dni', 'puesto', 'supermercado_nombre', 'deposito_id', 'deposito_nombre',
+            'fecha_registro', 'is_active'
         ]
         read_only_fields = ['id', 'fecha_registro']
+    
+    def get_deposito_id(self, obj):
+        """Obtiene el ID del depósito asignado al empleado"""
+        try:
+            from empleados.models import Empleado
+            empleado = Empleado.objects.filter(email=obj.email, supermercado=obj.supermercado).first()
+            return empleado.deposito.id if empleado and empleado.deposito else None
+        except Exception:
+            return None
+    
+    def get_deposito_nombre(self, obj):
+        """Obtiene el nombre del depósito asignado al empleado"""
+        try:
+            from empleados.models import Empleado
+            empleado = Empleado.objects.filter(email=obj.email, supermercado=obj.supermercado).first()
+            return empleado.deposito.nombre if empleado and empleado.deposito else None
+        except Exception:
+            return None
 
 
 class SupermercadoLoginSerializer(serializers.Serializer):
