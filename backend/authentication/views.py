@@ -1,18 +1,21 @@
 from rest_framework import status, generics, serializers
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
+import requests
 from .models import User, EmpleadoUser
 from .serializers import (
     UserRegistrationSerializer, 
     UserSerializer, 
     EmpleadoLoginSerializer,
     EmpleadoUserSerializer,
-    SupermercadoLoginSerializer
+    SupermercadoLoginSerializer,
+    UserProfileUpdateSerializer,
+    ChangePasswordSerializer
 )
 
 
@@ -119,10 +122,71 @@ class RegisterView(generics.CreateAPIView):
 class UserProfileView(generics.RetrieveUpdateAPIView):
     """Vista para obtener y actualizar perfil del usuario"""
     
-    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_serializer_class(self):
+        """Usar diferentes serializers para GET y PUT/PATCH"""
+        if self.request.method == 'GET':
+            return UserSerializer
+        return UserProfileUpdateSerializer
     
     def get_object(self):
+        # Verificar que el usuario autenticado sea un administrador (User, no EmpleadoUser)
+        if isinstance(self.request.user, EmpleadoUser):
+            raise serializers.ValidationError(
+                "Solo los administradores pueden acceder a este endpoint"
+            )
         return self.request.user
+    
+    def update(self, request, *args, **kwargs):
+        """Actualizar perfil del usuario"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        
+        try:
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            
+            # Devolver los datos completos del usuario
+            return Response({
+                'message': 'Perfil actualizado exitosamente',
+                'user': UserSerializer(instance).data
+            }, status=status.HTTP_200_OK)
+        except serializers.ValidationError as e:
+            return Response({
+                'message': 'Error en los datos proporcionados',
+                'errors': e.detail
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ChangePasswordView(APIView):
+    """Vista para cambiar contraseña del usuario"""
+    
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        # Verificar que el usuario autenticado sea un administrador (User, no EmpleadoUser)
+        if isinstance(request.user, EmpleadoUser):
+            return Response({
+                'message': 'Solo los administradores pueden cambiar su contraseña desde aquí'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = ChangePasswordSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                'message': 'Contraseña actualizada exitosamente'
+            }, status=status.HTTP_200_OK)
+        
+        return Response({
+            'message': 'Error al cambiar la contraseña',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class EmpleadoLoginView(APIView):
@@ -201,3 +265,134 @@ class EmpleadoProfileView(generics.RetrieveAPIView):
         if not isinstance(self.request.user, EmpleadoUser):
             raise serializers.ValidationError("Solo los empleados pueden acceder a este endpoint")
         return self.request.user
+
+
+# Vistas proxy para API de Georef (resolver CORS)
+
+class ProvinciasProxyView(APIView):
+    """Proxy para obtener provincias desde la API de Georef"""
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        try:
+            print("📍 Intentando obtener provincias...")
+            
+            # Configurar sesión con reintentos
+            session = requests.Session()
+            retry_strategy = requests.adapters.Retry(
+                total=3,
+                backoff_factor=1,
+                status_forcelist=[429, 500, 502, 503, 504],
+            )
+            adapter = requests.adapters.HTTPAdapter(max_retries=retry_strategy)
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
+            
+            response = session.get(
+                'https://apis.datos.gob.ar/georef/api/provincias',
+                params={'campos': 'id,nombre'},
+                timeout=30  # Aumentar timeout a 30 segundos
+            )
+            print(f"📍 Respuesta recibida: {response.status_code}")
+            response.raise_for_status()
+            data = response.json()
+            print(f"📍 Datos obtenidos: {len(data.get('provincias', []))} provincias")
+            return Response(data, status=status.HTTP_200_OK)
+        except requests.exceptions.Timeout as e:
+            print(f"❌ Timeout en provincias: {e}")
+            return Response(
+                {
+                    'error': 'Timeout al conectar con el servicio de provincias',
+                    'message': 'El servidor de datos geográficos está tardando demasiado. Por favor, intenta nuevamente en unos momentos.',
+                    'detail': str(e)
+                },
+                status=status.HTTP_504_GATEWAY_TIMEOUT
+            )
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Error en provincias: {e}")
+            return Response(
+                {
+                    'error': 'Error al obtener provincias',
+                    'message': 'No se pudo conectar con el servicio de datos geográficos. Verifica tu conexión a internet.',
+                    'detail': str(e)
+                },
+                status=status.HTTP_502_BAD_GATEWAY
+            )
+        except Exception as e:
+            print(f"❌ Error inesperado: {e}")
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {'error': f'Error inesperado: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class LocalidadesProxyView(APIView):
+    """Proxy para obtener localidades desde la API de Georef"""
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        provincia = request.query_params.get('provincia')
+        if not provincia:
+            return Response(
+                {'error': 'El parámetro "provincia" es requerido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            print(f"📍 Intentando obtener localidades para provincia: {provincia}")
+            
+            # Configurar sesión con reintentos
+            session = requests.Session()
+            retry_strategy = requests.adapters.Retry(
+                total=3,
+                backoff_factor=1,
+                status_forcelist=[429, 500, 502, 503, 504],
+            )
+            adapter = requests.adapters.HTTPAdapter(max_retries=retry_strategy)
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
+            
+            response = session.get(
+                'https://apis.datos.gob.ar/georef/api/localidades',
+                params={
+                    'provincia': provincia,
+                    'campos': 'id,nombre',
+                    'max': 1000
+                },
+                timeout=30  # Aumentar timeout a 30 segundos
+            )
+            print(f"📍 Respuesta recibida: {response.status_code}")
+            response.raise_for_status()
+            data = response.json()
+            print(f"📍 Datos obtenidos: {len(data.get('localidades', []))} localidades")
+            return Response(data, status=status.HTTP_200_OK)
+        except requests.exceptions.Timeout as e:
+            print(f"❌ Timeout en localidades: {e}")
+            return Response(
+                {
+                    'error': 'Timeout al conectar con el servicio de localidades',
+                    'message': 'El servidor de datos geográficos está tardando demasiado. Por favor, intenta nuevamente en unos momentos.',
+                    'detail': str(e)
+                },
+                status=status.HTTP_504_GATEWAY_TIMEOUT
+            )
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Error en localidades: {e}")
+            return Response(
+                {
+                    'error': 'Error al obtener localidades',
+                    'message': 'No se pudo conectar con el servicio de datos geográficos. Verifica tu conexión a internet.',
+                    'detail': str(e)
+                },
+                status=status.HTTP_502_BAD_GATEWAY
+            )
+        except Exception as e:
+            print(f"❌ Error inesperado: {e}")
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {'error': f'Error inesperado: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

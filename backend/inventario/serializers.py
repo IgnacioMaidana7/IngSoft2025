@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import Deposito, Transferencia, DetalleTransferencia, HistorialMovimiento
 from productos.models import Producto, ProductoDeposito
 from productos.serializers import ProductoSerializer
+from authentication.models import EmpleadoUser
 
 
 class DepositoSerializer(serializers.ModelSerializer):
@@ -122,7 +123,16 @@ class TransferenciaSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if request and hasattr(request, 'user'):
             user = request.user
-            if deposito_origen.supermercado != user or deposito_destino.supermercado != user:
+            
+            # Determinar el supermercado según el tipo de usuario
+            if isinstance(user, EmpleadoUser):
+                # Es un empleado, usar user.supermercado
+                supermercado = user.supermercado
+            else:
+                # Es un administrador, el user ES el supermercado
+                supermercado = user
+            
+            if deposito_origen.supermercado != supermercado or deposito_destino.supermercado != supermercado:
                 raise serializers.ValidationError(
                     'Los depósitos deben pertenecer a su supermercado'
                 )
@@ -134,9 +144,14 @@ class TransferenciaSerializer(serializers.ModelSerializer):
         detalles_data = validated_data.pop('detalles')
         request = self.context.get('request')
         
-        # Asignar el administrador
+        # Asignar el administrador (supermercado)
         if request and hasattr(request, 'user'):
-            validated_data['administrador'] = request.user
+            user = request.user
+            # Si es un empleado, usar su supermercado. Si es admin, usar el user directamente
+            if isinstance(user, EmpleadoUser):
+                validated_data['administrador'] = user.supermercado
+            else:
+                validated_data['administrador'] = user
         
         transferencia = Transferencia.objects.create(**validated_data)
         

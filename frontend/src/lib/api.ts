@@ -146,14 +146,39 @@ export async function downloadFile(
   return response.blob();
 }
 
+// Interfaces para el reconocimiento de productos
+export interface ProductoDetectado {
+  ingsoft_product_id?: number;
+  nombre?: string;
+  confidence?: number;
+  classification_confidence?: number;
+  bounding_box?: number[];
+  nombre_db?: string;
+  categoria_db?: string;
+  precio_db?: string;
+  existe_en_bd?: boolean;
+  stock_disponible?: number;
+  stock_minimo?: number;
+  stock_bajo?: boolean;
+  mensaje?: string;
+}
+
+export interface ReconocimientoResponse {
+  success: boolean;
+  productos?: ProductoDetectado[];
+  error?: string;
+  details?: string;
+  stock_suggestions?: ProductoDetectado[];
+}
+
 export async function uploadPhoto(
   file: File,
   token?: string | null
-): Promise<{ id: string; url: string }>
+): Promise<ReconocimientoResponse>
 {
   const formData = new FormData();
-  formData.append("file", file);
-  return apiFetch("/api/photos/", { method: "POST", body: formData, token: token ?? null, isMultipart: true });
+  formData.append("image", file); // El endpoint espera 'image', no 'file'
+  return apiFetch<ReconocimientoResponse>("/api/productos/reconocer-imagen/", { method: "POST", body: formData, token: token ?? null, isMultipart: true });
 }
 
 // Funciones de autenticación para supermercados
@@ -246,10 +271,13 @@ export interface EmpleadoAuthResponse {
     dni: string;
     puesto: 'CAJERO' | 'REPONEDOR';
     supermercado_nombre: string;
+    deposito_id: number | null;
+    deposito_nombre: string | null;
     fecha_registro: string;
     is_active: boolean;
   };
   user_type: 'empleado';
+  user_role: 'CAJERO' | 'REPONEDOR';
 }
 
 export async function loginEmpleado(data: EmpleadoLoginData): Promise<EmpleadoAuthResponse> {
@@ -264,6 +292,106 @@ export async function obtenerPerfilEmpleado(token: string): Promise<EmpleadoAuth
   return apiFetch<EmpleadoAuthResponse['user']>('/api/auth/empleado/profile/', {
     method: 'GET',
     token
+  });
+}
+
+// Funciones para el perfil del administrador
+export interface UserProfile {
+  id: number;
+  email: string;
+  username: string;
+  nombre_supermercado: string;
+  logo?: string;
+  cuil: string;
+  provincia: string;
+  localidad: string;
+  fecha_registro: string;
+  is_active: boolean;
+}
+
+export interface UpdateProfileData {
+  nombre_supermercado?: string;
+  provincia?: string;
+  localidad?: string;
+  logo?: File;
+}
+
+export interface ChangePasswordData {
+  current_password: string;
+  new_password: string;
+  confirm_password: string;
+}
+
+// Obtener perfil del administrador
+export async function obtenerPerfilAdministrador(token: string): Promise<UserProfile> {
+  return apiFetch<UserProfile>('/api/auth/profile/', {
+    method: 'GET',
+    token
+  });
+}
+
+// Actualizar perfil del administrador
+export async function actualizarPerfilAdministrador(token: string, data: UpdateProfileData): Promise<{ message: string; user: UserProfile }> {
+  const formData = new FormData();
+  
+  if (data.nombre_supermercado) {
+    formData.append('nombre_supermercado', data.nombre_supermercado);
+  }
+  if (data.provincia) {
+    formData.append('provincia', data.provincia);
+  }
+  if (data.localidad) {
+    formData.append('localidad', data.localidad);
+  }
+  if (data.logo) {
+    formData.append('logo', data.logo);
+  }
+
+  return apiFetch<{ message: string; user: UserProfile }>('/api/auth/profile/', {
+    method: 'PATCH',
+    body: formData,
+    token,
+    isMultipart: true
+  });
+}
+
+// Cambiar contraseña del administrador
+export async function cambiarContrasena(token: string, data: ChangePasswordData): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>('/api/auth/change-password/', {
+    method: 'POST',
+    body: data,
+    token
+  });
+}
+
+// Funciones para obtener datos geográficos (proxy para API de Georef)
+export interface Provincia {
+  id: string;
+  nombre: string;
+}
+
+export interface Localidad {
+  id: string;
+  nombre: string;
+}
+
+export interface ProvinciasResponse {
+  provincias: Provincia[];
+}
+
+export interface LocalidadesResponse {
+  localidades: Localidad[];
+}
+
+export async function obtenerProvincias(): Promise<ProvinciasResponse> {
+  return apiFetch<ProvinciasResponse>('/api/auth/provincias/', {
+    method: 'GET'
+  });
+}
+
+export async function obtenerLocalidades(provinciaId: string): Promise<LocalidadesResponse> {
+  return apiFetch<LocalidadesResponse>(`/api/auth/localidades/?provincia=${provinciaId}`, {
+    method: 'GET'
   });
 }
 
@@ -442,10 +570,37 @@ export async function obtenerRolesDisponibles(token: string): Promise<{ roles: R
 }
 
 export async function obtenerEstadisticasEmpleados(token: string): Promise<EstadisticasEmpleados> {
-  return apiFetch<EstadisticasEmpleados>('/api/empleados/estadisticas/', {
+  const response = await apiFetch<{
+    success: boolean;
+    data: {
+      total_empleados: number;
+      empleados_activos: number;
+      empleados_inactivos: number;
+      empleados_por_puesto: Array<{ puesto: string; total: number }>;
+      empleados_por_deposito: Array<{ id: number; nombre: string; total_empleados: number }>;
+    };
+  }>('/api/empleados/estadisticas/', {
     method: 'GET',
     token
   });
+  
+  // Transformar empleados_por_puesto de array a objeto
+  const empleadosPorPuesto: Record<string, number> = {};
+  response.data.empleados_por_puesto.forEach(item => {
+    empleadosPorPuesto[item.puesto] = item.total;
+  });
+  
+  // Transformar empleados_por_deposito de array a objeto
+  const empleadosPorDeposito: Record<string, number> = {};
+  response.data.empleados_por_deposito.forEach(item => {
+    empleadosPorDeposito[item.nombre] = item.total_empleados;
+  });
+  
+  return {
+    total_empleados: response.data.total_empleados,
+    empleados_por_puesto: empleadosPorPuesto,
+    empleados_por_deposito: empleadosPorDeposito,
+  };
 }
 
 // === INTERFACES PARA PRODUCTOS ===
@@ -534,6 +689,39 @@ export interface ProductosPorDeposito {
   productos: ProductoDeposito[];
 }
 
+export interface ProductoMiDeposito {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  categoria: {
+    id: number;
+    nombre: string;
+  };
+  precio: number;
+  codigo_barras: string;
+  activo: boolean;
+  stock: {
+    cantidad: number;
+    cantidad_minima: number;
+    tiene_stock: boolean;
+    stock_bajo: boolean;
+    deposito: {
+      id: number;
+      nombre: string;
+    };
+  };
+}
+
+export interface ProductosMiDeposito {
+  deposito: {
+    id: number;
+    nombre: string;
+    ubicacion: string;
+  };
+  productos: ProductoMiDeposito[];
+  total_productos: number;
+}
+
 export interface EstadisticasProductos {
   total_productos: number;
   total_categorias: number;
@@ -569,6 +757,14 @@ export async function obtenerCategoriasDisponibles(token: string): Promise<Categ
 
 export async function crearCategoria(data: Omit<Categoria, 'id' | 'fecha_creacion'>, token: string): Promise<Categoria> {
   return apiFetch<Categoria>('/api/productos/categorias/', {
+    method: 'POST',
+    body: data,
+    token
+  });
+}
+
+export async function crearCategoriaPersonalizada(data: { nombre: string; descripcion?: string }, token: string): Promise<CategoriaSimple> {
+  return apiFetch<CategoriaSimple>('/api/productos/categorias/crear-personalizada/', {
     method: 'POST',
     body: data,
     token
@@ -660,6 +856,14 @@ export async function eliminarProducto(id: number, token: string): Promise<void>
 
 export async function obtenerProductosPorDeposito(depositoId: number, token: string): Promise<ProductosPorDeposito> {
   return apiFetch<ProductosPorDeposito>(`/api/productos/deposito/${depositoId}/`, {
+    method: 'GET',
+    token
+  });
+}
+
+// Obtener productos del depósito asignado al reponedor actual
+export async function obtenerProductosMiDeposito(token: string): Promise<ProductosMiDeposito> {
+  return apiFetch<ProductosMiDeposito>('/api/productos/mi-deposito/', {
     method: 'GET',
     token
   });
@@ -805,6 +1009,11 @@ export interface ItemVenta {
   producto_nombre: string;
   cantidad: number;
   precio_unitario: string;
+  precio_original?: string;
+  descuento_aplicado?: string;
+  oferta_nombre?: string;
+  tiene_descuento?: boolean;
+  porcentaje_descuento?: number;
   subtotal: string;
   fecha_agregado: string;
 }
@@ -1046,4 +1255,287 @@ export async function descargarTicketHistorial(ventaId: number, token: string): 
     console.error('Error descargando PDF del historial:', error);
     throw error;
   }
+}
+
+// === RECONOCIMIENTO DE PRODUCTOS ===
+export interface ProductoReconocido {
+  product_id: number;
+  ingsoft_product_id: number | null;
+  name: string;
+  display_name: string;
+  category: string;
+  brand: string;
+  detection_confidence: number;
+  classification_confidence: number;
+  bbox: {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    width: number;
+    height: number;
+  };
+  // Información enriquecida desde la BD
+  nombre_db?: string;
+  categoria_db?: string;
+  precio_db?: string;
+  existe_en_bd?: boolean;
+  stock_disponible?: number;
+  stock_minimo?: number;
+  stock_bajo?: boolean;
+  mensaje?: string;
+}
+
+export interface RecognitionResponse {
+  success: boolean;
+  total_productos: number;
+  productos: ProductoReconocido[];
+  processing_time_ms: number;
+  deposito_id?: number;
+  error?: string;
+  stock_suggestions?: any[];
+}
+
+// Reconocer productos desde una imagen
+export async function reconocerProductosImagen(
+  imageFile: File,
+  token: string
+): Promise<RecognitionResponse> {
+  const formData = new FormData();
+  formData.append('image', imageFile);
+  
+  return apiFetch<RecognitionResponse>('/api/productos/reconocer-imagen/', {
+    method: 'POST',
+    body: formData,
+    token,
+    isMultipart: true
+  });
+}
+
+// Verificar estado de la API de reconocimiento
+export async function verificarApiReconocimiento(token: string): Promise<{ success: boolean; status: string; details?: any; error?: string }> {
+  return apiFetch<{ success: boolean; status: string; details?: any; error?: string }>('/api/productos/verificar-api-reconocimiento/', {
+    method: 'GET',
+    token
+  });
+}
+
+// Obtener catálogo de productos reconocibles
+export async function obtenerCatalogoReconocimiento(token: string): Promise<any> {
+  return apiFetch<any>('/api/productos/catalogo-reconocimiento/', {
+    method: 'GET',
+    token
+  });
+}
+
+// === OFERTAS ===
+export interface Oferta {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  tipo_descuento: 'porcentaje' | 'monto_fijo';
+  valor_descuento: string;
+  fecha_inicio: string;
+  fecha_fin: string;
+  activo: boolean;
+  fecha_creacion: string;
+  fecha_modificacion: string;
+  estado: 'proxima' | 'activa' | 'expirada';
+  puede_editar: boolean;
+}
+
+export interface OfertaCreate {
+  nombre: string;
+  descripcion: string;
+  tipo_descuento: 'porcentaje' | 'monto_fijo';
+  valor_descuento: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+}
+
+export interface OfertaList {
+  id: number;
+  nombre: string;
+  tipo_descuento: 'porcentaje' | 'monto_fijo';
+  tipo_descuento_display: string;
+  valor_descuento: string;
+  fecha_inicio: string;
+  fecha_fin: string;
+  estado: 'proxima' | 'activa' | 'expirada';
+  puede_editar: boolean;
+  activo: boolean;
+}
+
+export interface EstadisticasOfertas {
+  total: number;
+  activas: number;
+  proximas: number;
+  expiradas: number;
+}
+
+// Obtener todas las ofertas
+export async function obtenerOfertas(
+  token: string,
+  page?: number,
+  filters?: {
+    estado?: 'proxima' | 'activa' | 'expirada';
+    tipo_descuento?: 'porcentaje' | 'monto_fijo';
+    activo?: boolean;
+  }
+): Promise<PaginatedResponse<OfertaList>> {
+  let url = '/api/ofertas/api/ofertas/';
+  const params = new URLSearchParams();
+  
+  if (page) params.append('page', page.toString());
+  if (filters?.estado) params.append('estado', filters.estado);
+  if (filters?.tipo_descuento) params.append('tipo_descuento', filters.tipo_descuento);
+  if (filters?.activo !== undefined) params.append('activo', filters.activo.toString());
+  
+  if (params.toString()) {
+    url += `?${params.toString()}`;
+  }
+  
+  const response = await apiFetch<PaginatedResponse<OfertaList>>(url, {
+    method: 'GET',
+    token
+  });
+  
+  return {
+    ...response,
+    results: response.results || (response as unknown as OfertaList[])
+  };
+}
+
+// Obtener una oferta específica
+export async function obtenerOferta(id: number, token: string): Promise<Oferta> {
+  return apiFetch<Oferta>(`/api/ofertas/api/ofertas/${id}/`, {
+    method: 'GET',
+    token
+  });
+}
+
+// Crear nueva oferta
+export async function crearOferta(data: OfertaCreate, token: string): Promise<{message: string; data: Oferta}> {
+  return apiFetch<{message: string; data: Oferta}>('/api/ofertas/api/ofertas/', {
+    method: 'POST',
+    body: data,
+    token
+  });
+}
+
+// Actualizar oferta existente
+export async function actualizarOferta(id: number, data: Partial<OfertaCreate>, token: string): Promise<{message: string; data: Oferta}> {
+  return apiFetch<{message: string; data: Oferta}>(`/api/ofertas/api/ofertas/${id}/`, {
+    method: 'PUT',
+    body: data,
+    token
+  });
+}
+
+// Eliminar oferta
+export async function eliminarOferta(id: number, token: string): Promise<{message: string}> {
+  return apiFetch<{message: string}>(`/api/ofertas/api/ofertas/${id}/`, {
+    method: 'DELETE',
+    token
+  });
+}
+
+// Activar/desactivar oferta
+export async function toggleActivarOferta(id: number, token: string): Promise<{message: string; activo: boolean}> {
+  return apiFetch<{message: string; activo: boolean}>(`/api/ofertas/api/ofertas/${id}/activar_desactivar/`, {
+    method: 'POST',
+    token
+  });
+}
+
+// Obtener estadísticas de ofertas
+export async function obtenerEstadisticasOfertas(token: string): Promise<EstadisticasOfertas> {
+  return apiFetch<EstadisticasOfertas>('/api/ofertas/api/ofertas/estadisticas/', {
+    method: 'GET',
+    token
+  });
+}
+
+// === PRODUCTOS CON OFERTAS ===
+export interface ProductoOferta {
+  id: number;
+  producto: number;
+  producto_nombre: string;
+  producto_categoria: string;
+  oferta: number;
+  oferta_nombre: string;
+  precio_original: string;
+  precio_con_descuento: string;
+  descuento_aplicado: number;
+  porcentaje_descuento: number;
+  fecha_asignacion: string;
+}
+
+export interface ProductoConOferta {
+  id: number;
+  nombre: string;
+  categoria: string;
+  precio: string;
+  tiene_ofertas_activas: boolean;
+  precio_con_descuento: string;
+  mejor_oferta: ProductoOferta | null;
+  ofertas_aplicadas: ProductoOferta[];
+}
+
+// Obtener productos con información de ofertas
+export async function obtenerProductosConOfertas(
+  token: string,
+  filters?: {
+    categoria?: number;
+    estado_oferta?: 'con_oferta' | 'sin_oferta';
+  }
+): Promise<ProductoConOferta[]> {
+  let url = '/api/ofertas/api/producto-ofertas/productos_con_ofertas/';
+  const params = new URLSearchParams();
+  
+  if (filters?.categoria) params.append('categoria', filters.categoria.toString());
+  if (filters?.estado_oferta) params.append('estado_oferta', filters.estado_oferta);
+  
+  if (params.toString()) {
+    url += `?${params.toString()}`;
+  }
+  
+  return apiFetch<ProductoConOferta[]>(url, {
+    method: 'GET',
+    token
+  });
+}
+
+// Asignar productos a una oferta
+export async function asignarProductosAOferta(
+  ofertaId: number,
+  productosIds: number[],
+  token: string
+): Promise<{message: string; asignaciones: ProductoOferta[]; errores?: string[]}> {
+  return apiFetch<{message: string; asignaciones: ProductoOferta[]; errores?: string[]}>(`/api/ofertas/api/ofertas/${ofertaId}/asignar_productos/`, {
+    method: 'POST',
+    body: { productos_ids: productosIds },
+    token
+  });
+}
+
+// Quitar productos de una oferta
+export async function quitarProductosDeOferta(
+  ofertaId: number,
+  productosIds: number[],
+  token: string
+): Promise<{message: string}> {
+  return apiFetch<{message: string}>(`/api/ofertas/api/ofertas/${ofertaId}/quitar_productos/`, {
+    method: 'POST',
+    body: { productos_ids: productosIds },
+    token
+  });
+}
+
+// Obtener productos asociados a una oferta
+export async function obtenerProductosDeOferta(ofertaId: number, token: string): Promise<ProductoOferta[]> {
+  return apiFetch<ProductoOferta[]>(`/api/ofertas/api/ofertas/${ofertaId}/productos/`, {
+    method: 'GET',
+    token
+  });
 }

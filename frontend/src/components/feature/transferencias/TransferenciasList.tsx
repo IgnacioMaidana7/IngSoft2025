@@ -112,7 +112,7 @@ export default function TransferenciasListPage() {
             <p className="text-lightText mb-6">
               Comience creando su primera transferencia de productos
             </p>
-            <Link href="/inventario/transferir/nueva">
+            <Link href="/inventario/transferencias/nueva">
               <Button>Crear Primera Transferencia</Button>
             </Link>
           </div>
@@ -189,22 +189,12 @@ export default function TransferenciasListPage() {
                           </Link>
                           
                           {transferencia.estado === 'PENDIENTE' && (
-                            <>
-                              <Link href={`/inventario/transferencias/${transferencia.id}/editar`}>
-                                <button
-                                  className="px-3 py-1 text-sm rounded border border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-white transition-colors"
-                                >
-                                  Editar
-                                </button>
-                              </Link>
-                              
-                              <button
-                                onClick={() => handleEliminar(transferencia.id)}
-                                className="px-3 py-1 text-sm rounded border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-colors"
-                              >
-                                Eliminar
-                              </button>
-                            </>
+                            <button
+                              onClick={() => handleEliminar(transferencia.id)}
+                              className="px-3 py-1 text-sm rounded border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-colors"
+                            >
+                              Eliminar
+                            </button>
                           )}
                         </div>
                       </td>

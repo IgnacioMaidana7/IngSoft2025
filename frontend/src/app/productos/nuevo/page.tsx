@@ -7,6 +7,7 @@ import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import Container from "@/components/layout/Container";
 import Card from "@/components/layout/Card";
+import SelectorCategorias from "@/components/productos/SelectorCategorias";
 import { 
   crearProducto, 
   obtenerCategoriasDisponibles,
@@ -145,6 +146,10 @@ export default function NuevoProductoPage() {
     router.push('/productos');
   };
 
+  const handleCategoriaCreada = (nuevaCategoria: CategoriaSimple) => {
+    setCategorias(prev => [...prev, nuevaCategoria]);
+  };
+
   if (loading) {
     return (
       <Container size="xl">
@@ -180,7 +185,9 @@ export default function NuevoProductoPage() {
           <button
             onClick={handleCancel}
             className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 transition-colors"
+            title="Volver a Productos"
           >
+            <span className="text-2xl">←</span>
           </button>
           <div className="w-12 h-12 bg-gradient-to-br from-primary to-primary/80 rounded-2xl flex items-center justify-center text-white text-2xl shadow-xl shadow-primary/30">
             🏷️
@@ -215,19 +222,14 @@ export default function NuevoProductoPage() {
                 <label className="block text-sm font-medium text-text mb-2">
                   Categoría *
                 </label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                <SelectorCategorias
+                  categorias={categorias}
                   value={formData.categoria || ""}
-                  onChange={(e) => handleInputChange('categoria', Number(e.target.value))}
+                  onChange={(value) => handleInputChange('categoria', value)}
+                  onCategoriaCreada={handleCategoriaCreada}
                   required
-                >
-                  <option value="">Seleccionar categoría</option>
-                  {categorias.map((categoria) => (
-                    <option key={categoria.id} value={categoria.id}>
-                      {categoria.nombre}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Seleccionar categoría"
+                />
               </div>
 
               <div>
