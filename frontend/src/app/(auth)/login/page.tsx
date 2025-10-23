@@ -74,9 +74,20 @@ export default function LoginPage() {
       // Actualizar contexto de autenticación
       await login();
       
-      // Redirigir según el tipo de usuario
+      // Redirigir según el tipo de usuario y rol
       if (loginType === 'empleado') {
-        router.replace("/empleado/dashboard"); // Crear dashboard específico para empleados
+        const empleadoResponse = response as EmpleadoAuthResponse;
+        const puesto = empleadoResponse.user.puesto;
+        
+        // Redirigir a dashboard específico del rol
+        if (puesto === 'CAJERO') {
+          router.replace("/empleado/cajero/dashboard");
+        } else if (puesto === 'REPONEDOR') {
+          router.replace("/empleado/reponedor/dashboard");
+        } else {
+          // Fallback al dashboard genérico de empleados
+          router.replace("/empleado/dashboard");
+        }
       } else {
         router.replace("/dashboard");
       }

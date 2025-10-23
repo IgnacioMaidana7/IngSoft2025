@@ -36,6 +36,16 @@ export default function HistorialVentas() {
 
   const { showToast } = useToast();
   const { token } = useAuth();
+  
+  // Determinar si es cajero o admin
+  const userType = typeof window !== 'undefined' ? localStorage.getItem('user_type') : null;
+  const isCajero = userType === 'empleado';
+  
+  // Ajustar título y descripción según el tipo de usuario
+  const titulo = isCajero ? "Mis Ventas" : "Historial de Ventas";
+  const descripcion = isCajero 
+    ? "Consulta el historial de tus ventas realizadas" 
+    : "Gestiona y descarga el historial completo de ventas del supermercado";
 
   // Cargar historial inicial
   useEffect(() => {
@@ -133,9 +143,9 @@ export default function HistorialVentas() {
         {/* Encabezado */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Historial de Ventas</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{titulo}</h1>
             <p className="text-gray-600 mt-1">
-              Gestiona y descarga el historial completo de ventas del supermercado
+              {descripcion}
             </p>
           </div>
         </div>
@@ -145,7 +155,7 @@ export default function HistorialVentas() {
           <div className="p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Filtros de búsqueda</h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className={`grid grid-cols-1 md:grid-cols-2 ${!isCajero ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4`}>
               {/* Filtro por estado */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -190,19 +200,21 @@ export default function HistorialVentas() {
                 />
               </div>
 
-              {/* Cajero */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Cajero
-                </label>
-                <input
-                  type="text"
-                  placeholder="Nombre del cajero..."
-                  value={filtros.cajero}
-                  onChange={(e) => handleFiltroChange('cajero', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                />
-              </div>
+              {/* Cajero - Solo visible para admins */}
+              {!isCajero && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Cajero
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Nombre del cajero..."
+                    value={filtros.cajero}
+                    onChange={(e) => handleFiltroChange('cajero', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Botones de filtros */}
@@ -259,9 +271,11 @@ export default function HistorialVentas() {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         N° Venta
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Cajero
-                      </th>
+                      {!isCajero && (
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Cajero
+                        </th>
+                      )}
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Cliente
                       </th>
@@ -287,9 +301,11 @@ export default function HistorialVentas() {
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                             {venta.numero_venta}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {venta.cajero_nombre}
-                          </td>
+                          {!isCajero && (
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {venta.cajero_nombre}
+                            </td>
+                          )}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {venta.cliente_telefono || "-"}
                           </td>

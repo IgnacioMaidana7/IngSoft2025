@@ -18,6 +18,7 @@ from .serializers import (
     HistorialVentaSerializer
 )
 from productos.models import Producto, ProductoDeposito
+from authentication.models import EmpleadoUser
 from authentication.permissions import IsCajeroOrAdmin, IsSupermercadoAdmin
 from .pdf_generator import generar_ticket_pdf_response, guardar_ticket_pdf
 
@@ -566,15 +567,28 @@ def buscar_productos(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated, IsSupermercadoAdmin])
+@permission_classes([permissions.IsAuthenticated, IsCajeroOrAdmin])
 def historial_ventas(request):
     """
-    Vista para obtener el historial completo de ventas.
-    Solo accesible para administradores de supermercado.
+    Vista para obtener el historial de ventas.
+    - Administradores: Ven todas las ventas de su supermercado
+    - Cajeros: Ven solo sus propias ventas
     """
     try:
-        # Obtener todas las ventas del supermercado del administrador
-        ventas = Venta.objects.filter(cajero=request.user).order_by('-fecha_creacion')
+        # Determinar el tipo de usuario y filtrar las ventas apropiadamente
+        if isinstance(request.user, EmpleadoUser):
+            # Si es un empleado cajero, mostrar solo sus ventas
+            if request.user.puesto == 'CAJERO':
+                ventas = Venta.objects.filter(empleado_cajero=request.user).order_by('-fecha_creacion')
+            else:
+                # Si es otro tipo de empleado, no debería tener acceso (por IsCajeroOrAdmin)
+                return Response(
+                    {'error': 'No tienes permiso para ver el historial de ventas'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        else:
+            # Si es un administrador, mostrar todas las ventas de su supermercado
+            ventas = Venta.objects.filter(cajero=request.user).order_by('-fecha_creacion')
         
         # Filtros opcionales
         estado = request.GET.get('estado')
@@ -645,15 +659,21 @@ def historial_ventas(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated, IsSupermercadoAdmin])
+@permission_classes([permissions.IsAuthenticated, IsCajeroOrAdmin])
 def descargar_ticket_pdf(request, venta_id):
     """
     Vista para descargar el ticket PDF de una venta específica.
-    Solo accesible para administradores de supermercado.
+    - Administradores: Pueden descargar tickets de cualquier venta de su supermercado
+    - Cajeros: Pueden descargar tickets solo de sus propias ventas
     """
     try:
-        # Verificar que la venta pertenezca al supermercado del administrador
-        venta = get_object_or_404(Venta, id=venta_id, cajero=request.user)
+        # Filtrar según el tipo de usuario
+        if isinstance(request.user, EmpleadoUser):
+            # Si es un empleado cajero, solo puede ver sus propias ventas
+            venta = get_object_or_404(Venta, id=venta_id, empleado_cajero=request.user)
+        else:
+            # Si es administrador, puede ver todas las ventas de su supermercado
+            venta = get_object_or_404(Venta, id=venta_id, cajero=request.user)
         
         # Verificar que la venta esté completada
         if venta.estado != 'COMPLETADA':

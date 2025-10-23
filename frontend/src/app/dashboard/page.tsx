@@ -38,8 +38,28 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!token) return;
+    
+    // Verificar tipo de usuario y redirigir a empleados
+    const userType = localStorage.getItem('user_type');
+    const userRole = localStorage.getItem('user_role');
+    
+    if (userType === 'empleado') {
+      // Redirigir a dashboard específico según el rol
+      if (userRole === 'CAJERO') {
+        router.replace('/empleado/cajero/dashboard');
+        return;
+      } else if (userRole === 'REPONEDOR') {
+        router.replace('/empleado/reponedor/dashboard');
+        return;
+      } else {
+        // Fallback al dashboard genérico de empleados
+        router.replace('/empleado/dashboard');
+        return;
+      }
+    }
+    
     cargarDatosDashboard();
-  }, [token]);
+  }, [token, router]);
 
   const cargarDatosDashboard = async () => {
     if (!token) return;
@@ -259,7 +279,7 @@ export default function DashboardPage() {
                     </button>
 
                     <button
-                      onClick={() => router.push('/historial-ventas')}
+                      onClick={() => router.push('/ventas/historial')}
                       className="p-4 bg-gradient-to-br from-green-50 to-green-100 hover:from-green-100 hover:to-green-200 rounded-xl text-left transition-all duration-300 hover:scale-105 group border border-green-200"
                     >
                       <div className="text-3xl mb-2">📊</div>
@@ -281,7 +301,7 @@ export default function DashboardPage() {
                     </button>
 
                     <button
-                      onClick={() => router.push('/depositos')}
+                      onClick={() => router.push('/inventario/depositos')}
                       className="p-4 bg-gradient-to-br from-indigo-50 to-indigo-100 hover:from-indigo-100 hover:to-indigo-200 rounded-xl text-left transition-all duration-300 hover:scale-105 group border border-indigo-200"
                     >
                       <div className="text-3xl mb-2">🏪</div>

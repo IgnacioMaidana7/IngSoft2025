@@ -11,7 +11,24 @@ export default function Home() {
     if (!isLoggedIn) {
       router.replace("/login");
     } else {
-      router.replace("/dashboard");
+      // Verificar tipo de usuario y redirigir según el rol
+      const userType = localStorage.getItem('user_type');
+      const userRole = localStorage.getItem('user_role');
+      
+      if (userType === 'empleado') {
+        // Redirigir a dashboard específico según el rol del empleado
+        if (userRole === 'CAJERO') {
+          router.replace('/empleado/cajero/dashboard');
+        } else if (userRole === 'REPONEDOR') {
+          router.replace('/empleado/reponedor/dashboard');
+        } else {
+          // Fallback al dashboard genérico de empleados
+          router.replace('/empleado/dashboard');
+        }
+      } else {
+        // Usuario administrador
+        router.replace("/dashboard");
+      }
     }
   }, [isLoggedIn, router]);
 

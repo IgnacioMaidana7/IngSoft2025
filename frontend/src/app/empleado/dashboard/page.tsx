@@ -35,6 +35,16 @@ export default function EmpleadoDashboard() {
       return;
     }
 
+    // Redirigir a dashboard específico del rol si existe
+    const userRole = localStorage.getItem('user_role');
+    if (userRole === 'CAJERO') {
+      router.replace('/empleado/cajero/dashboard');
+      return;
+    } else if (userRole === 'REPONEDOR') {
+      router.replace('/empleado/reponedor/dashboard');
+      return;
+    }
+
     // Cargar datos del empleado
     const cargarDatosEmpleado = async () => {
       try {
@@ -193,8 +203,8 @@ export default function EmpleadoDashboard() {
               </div>
             </div>
           ) : (
-            /* Cajero - Solo Ventas */
-            <div className="grid md:grid-cols-1 gap-6">
+            /* Cajero - Ventas e Historial */
+            <div className="grid md:grid-cols-2 gap-6">
               <div 
                 className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer border border-gray-200"
                 onClick={() => router.push('/ventas')}
@@ -214,6 +224,26 @@ export default function EmpleadoDashboard() {
                   </div>
                 </div>
               </div>
+
+              <div 
+                className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer border border-gray-200"
+                onClick={() => router.push('/ventas/historial')}
+              >
+                <div className="p-6 text-center">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-3xl">📊</span>
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                    Mis Ventas
+                  </h3>
+                  <p className="text-gray-600 mb-4">
+                    Consulta el historial de tus ventas realizadas
+                  </p>
+                  <div className="text-primary font-medium">
+                    Ver Historial →
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -226,7 +256,7 @@ export default function EmpleadoDashboard() {
               <div className="text-center py-4">
                 <p className="text-gray-600">
                   {puesto === 'CAJERO' 
-                    ? 'Como cajero, tienes acceso al sistema de ventas para procesar transacciones de manera eficiente.' 
+                    ? 'Como cajero, tienes acceso al sistema de ventas para procesar transacciones y consultar tu historial de ventas realizadas.' 
                     : 'Como reponedor, puedes gestionar productos e inventario para mantener el supermercado abastecido.'
                   }
                 </p>

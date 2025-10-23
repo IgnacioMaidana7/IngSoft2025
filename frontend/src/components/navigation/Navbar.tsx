@@ -74,7 +74,17 @@ export default function Navbar() {
   };
 
   const getHomeLink = () => {
-    return userType === 'empleado' ? '/empleado/dashboard' : '/dashboard';
+    if (userType === 'empleado') {
+      // Redirigir al dashboard específico del rol
+      if (userRole === 'CAJERO') {
+        return '/empleado/cajero/dashboard';
+      } else if (userRole === 'REPONEDOR') {
+        return '/empleado/reponedor/dashboard';
+      } else {
+        return '/empleado/dashboard';
+      }
+    }
+    return '/dashboard';
   };
 
   const getNavItems = () => {
@@ -87,7 +97,8 @@ export default function Navbar() {
         ];
       } else if (userRole === 'CAJERO' || empleadoData?.puesto === 'CAJERO') {
         return [
-          { href: '/ventas', label: 'Ventas', icon: '💰' }
+          { href: '/ventas', label: 'Ventas', icon: '💰' },
+          { href: '/ventas/historial', label: 'Mis Ventas', icon: '📊' }
         ];
       } else {
         // Fallback para empleados sin rol específico
