@@ -208,42 +208,37 @@ export default function CajeroDashboard() {
             </div>
           </Card>
 
-          {/* Ventas Pendientes */}
+          {/* Ticket Promedio Total */}
           <Card variant="elevated" padding="lg" hover={true}>
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm font-medium text-lightText mb-1">Pendientes</p>
-                <p className="text-3xl font-bold text-text">{ventasPendientes}</p>
-                <p className="text-xs text-orange-600 mt-2 font-medium">
-                  {ventasPendientes > 0 ? 'Requieren atención' : 'Sin pendientes'}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center text-white text-2xl">
-                ⏳
-              </div>
-            </div>
-            {ventasPendientes > 0 && (
-              <div className="mt-4 pt-4 border-t border-border">
-                <p className="text-sm text-orange-600 font-medium">
-                  ⚠️ {ventasPendientes} venta{ventasPendientes !== 1 ? 's' : ''} sin finalizar
-                </p>
-              </div>
-            )}
-          </Card>
-
-          {/* Promedio por Venta */}
-          <Card variant="elevated" padding="lg" hover={true}>
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-lightText mb-1">Promedio/Venta</p>
+                <p className="text-sm font-medium text-lightText mb-1">Ticket Promedio</p>
                 <p className="text-3xl font-bold text-text">
-                  ${ventasHoy > 0 ? (parseFloat(totalVentasHoy) / ventasHoy).toFixed(2) : '0.00'}
+                  ${ventasTotales > 0 ? (parseFloat(montoTotalHistorico) / ventasTotales).toFixed(2) : '0.00'}
                 </p>
                 <p className="text-xs text-purple-600 mt-2 font-medium">
-                  Hoy
+                  Histórico
                 </p>
               </div>
               <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center text-white text-2xl">
+                🎯
+              </div>
+            </div>
+          </Card>
+
+          {/* Promedio por Venta Hoy */}
+          <Card variant="elevated" padding="lg" hover={true}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-lightText mb-1">Promedio Hoy</p>
+                <p className="text-3xl font-bold text-text">
+                  ${ventasHoy > 0 ? (parseFloat(totalVentasHoy) / ventasHoy).toFixed(2) : '0.00'}
+                </p>
+                <p className="text-xs text-orange-600 mt-2 font-medium">
+                  {ventasHoy > 0 ? `${ventasHoy} venta${ventasHoy !== 1 ? 's' : ''}` : 'Sin ventas'}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center text-white text-2xl">
                 📈
               </div>
             </div>
