@@ -33,6 +33,8 @@ export default function CajeroDashboard() {
   const [empleadoData, setEmpleadoData] = useState<EmpleadoData | null>(null);
   const [ventasHoy, setVentasHoy] = useState<number>(0);
   const [totalVentasHoy, setTotalVentasHoy] = useState<string>("0.00");
+  const [ventasSemana, setVentasSemana] = useState<number>(0);
+  const [totalVentasSemana, setTotalVentasSemana] = useState<string>("0.00");
   const [ventasPendientes, setVentasPendientes] = useState<number>(0);
   const [ultimasVentas, setUltimasVentas] = useState<Venta[]>([]);
   const [ventasTotales, setVentasTotales] = useState<number>(0);
@@ -98,6 +100,21 @@ export default function CajeroDashboard() {
           return sum + parseFloat(venta.total);
         }, 0);
         setTotalVentasHoy(totalHoy.toFixed(2));
+
+        // Calcular ventas de la semana (últimos 7 días)
+        const hace7Dias = new Date();
+        hace7Dias.setDate(hace7Dias.getDate() - 7);
+        const ventasSemanaData = completadas.filter(v => {
+          const fechaVenta = new Date(v.fecha_creacion);
+          return fechaVenta >= hace7Dias;
+        });
+        
+        setVentasSemana(ventasSemanaData.length);
+        
+        const totalSemana = ventasSemanaData.reduce((sum, venta) => {
+          return sum + parseFloat(venta.total);
+        }, 0);
+        setTotalVentasSemana(totalSemana.toFixed(2));
 
         // Obtener últimas 5 ventas completadas
         const ventasOrdenadas = [...completadas].sort((a, b) => 
@@ -192,6 +209,22 @@ export default function CajeroDashboard() {
             </div>
           </Card>
 
+          {/* Ventas Esta Semana */}
+          <Card variant="elevated" padding="lg" hover={true}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-lightText mb-1">Esta Semana</p>
+                <p className="text-3xl font-bold text-text">{ventasSemana}</p>
+                <p className="text-xs text-purple-600 mt-2 font-medium">
+                  ${totalVentasSemana}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center text-white text-2xl">
+                📅
+              </div>
+            </div>
+          </Card>
+
           {/* Ventas Totales */}
           <Card variant="elevated" padding="lg" hover={true}>
             <div className="flex items-start justify-between">
@@ -204,24 +237,6 @@ export default function CajeroDashboard() {
               </div>
               <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center text-white text-2xl">
                 💵
-              </div>
-            </div>
-          </Card>
-
-          {/* Ticket Promedio Total */}
-          <Card variant="elevated" padding="lg" hover={true}>
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-lightText mb-1">Ticket Promedio</p>
-                <p className="text-3xl font-bold text-text">
-                  ${ventasTotales > 0 ? (parseFloat(montoTotalHistorico) / ventasTotales).toFixed(2) : '0.00'}
-                </p>
-                <p className="text-xs text-purple-600 mt-2 font-medium">
-                  Histórico
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center text-white text-2xl">
-                🎯
               </div>
             </div>
           </Card>
