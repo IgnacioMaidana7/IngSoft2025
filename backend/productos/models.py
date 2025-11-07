@@ -142,39 +142,26 @@ def notificar_stock_minimo(sender, instance: ProductoDeposito, created, **kwargs
                 mensaje=mensaje,
                 tipo="STOCK_MINIMO",
             )
-            print(f"Notificación creada para admin: {admin.username}")
 
             # Notificar a todos los reponedores asignados a ese depósito
             try:
-                from empleados.models import Empleado
-                # Obtener empleados reponedores del depósito específico
-                empleados_dep = Empleado.objects.filter(
+                # Obtener empleados reponedores del depósito específico directamente de EmpleadoUser
+                empleados_dep = EmpleadoUser.objects.filter(
                     deposito=instance.deposito, 
                     puesto='REPONEDOR', 
-                    activo=True
+                    activo=True,
+                    is_active=True
                 )
                 
-                for empleado in empleados_dep:
-                    try:
-                        # Buscar el EmpleadoUser correspondiente por email y supermercado
-                        empleado_user = EmpleadoUser.objects.get(
-                            email=empleado.email,
-                            supermercado=admin,
-                            is_active=True
-                        )
-                        Notificacion.objects.create(
-                            empleado=empleado_user,
-                            titulo=titulo,
-                            mensaje=mensaje,
-                            tipo="STOCK_MINIMO",
-                        )
-                        print(f"Notificación creada para empleado: {empleado_user.email}")
-                    except EmpleadoUser.DoesNotExist:
-                        print(f"EmpleadoUser no encontrado para email: {empleado.email}")
-                        continue
+                for empleado_user in empleados_dep:
+                    Notificacion.objects.create(
+                        empleado=empleado_user,
+                        titulo=titulo,
+                        mensaje=mensaje,
+                        tipo="STOCK_MINIMO",
+                    )
                         
             except Exception as e:
-                print(f"Error notificando a reponedores: {e}")
                 # Si falla la lógica específica de depósito, notificar a todos los reponedores del supermercado
                 reponedores = EmpleadoUser.objects.filter(
                     supermercado=admin,
@@ -188,9 +175,7 @@ def notificar_stock_minimo(sender, instance: ProductoDeposito, created, **kwargs
                         mensaje=mensaje,
                         tipo="STOCK_MINIMO",
                     )
-                    print(f"Notificación creada para reponedor (fallback): {rep.email}")
                     
     except Exception as e:
-        print(f"Error en notificar_stock_minimo: {e}")
         # Evitar que una notificación falle la transacción principal
         pass

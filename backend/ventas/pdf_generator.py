@@ -97,8 +97,8 @@ class TicketPDFGenerator:
         
         # Mostrar información del cajero según el tipo
         if self.venta.empleado_cajero:
-            # Es una venta realizada por un empleado cajero
-            cajero_nombre = f"{self.venta.empleado_cajero.nombre} {self.venta.empleado_cajero.apellido}"
+            # Es una venta realizada por un empleado cajero (EmpleadoUser usa first_name y last_name)
+            cajero_nombre = f"{self.venta.empleado_cajero.first_name} {self.venta.empleado_cajero.last_name}".strip()
         else:
             # Es una venta realizada por el admin del supermercado
             cajero_nombre = self.venta.cajero.get_full_name() or "Administrador"

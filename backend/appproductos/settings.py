@@ -48,7 +48,6 @@ INSTALLED_APPS = [
     
     # Local apps
     'authentication',
-    'empleados',
     'productos',
     'inventario',
     'ventas',

@@ -144,14 +144,16 @@ class TransferenciaSerializer(serializers.ModelSerializer):
         detalles_data = validated_data.pop('detalles')
         request = self.context.get('request')
         
-        # Asignar el administrador (supermercado)
+        # Asignar el administrador (supermercado) y empleado creador si aplica
         if request and hasattr(request, 'user'):
             user = request.user
-            # Si es un empleado, usar su supermercado. Si es admin, usar el user directamente
+            # Si es un empleado, usar su supermercado y guardar el empleado creador
             if isinstance(user, EmpleadoUser):
                 validated_data['administrador'] = user.supermercado
+                validated_data['empleado_creador'] = user
             else:
                 validated_data['administrador'] = user
+                validated_data['empleado_creador'] = None
         
         transferencia = Transferencia.objects.create(**validated_data)
         

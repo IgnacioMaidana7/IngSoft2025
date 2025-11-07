@@ -22,7 +22,6 @@ from rest_framework.test import APIClient
 from rest_framework import status
 
 from authentication.models import EmpleadoUser
-from empleados.models import Empleado
 from inventario.models import Deposito
 from productos.models import Producto, Categoria, ProductoDeposito
 from notificaciones.models import Notificacion
@@ -66,27 +65,17 @@ class BaseReponedorTestCase(TestCase):
             supermercado=self.admin_user
         )
         
-        # Crear empleado
-        self.empleado = Empleado.objects.create(
-            supermercado=self.admin_user,
-            nombre='Maria',
-            apellido='González',
-            email=f'maria_empleado_{self.unique_class_id}_{self.unique_test_id}@test.com',
-            dni='12345678',  # DNI numérico válido
-            puesto='REPONEDOR',
-            deposito=self.deposito
-        )
-        
         # Crear usuario empleado con DNI numérico válido
         self.repo_user = EmpleadoUser.objects.create_user(
             username=f'maria_{self.unique_class_id}_{self.unique_test_id}',
             email=f'maria_{self.unique_class_id}_{self.unique_test_id}@test.com',
             password='testpass123',
-            nombre='Maria',
-            apellido='González',
+            first_name='Maria',
+            last_name='González',
             dni='87654321',  # DNI numérico válido diferente
             puesto='REPONEDOR',
-            supermercado=self.admin_user
+            supermercado=self.admin_user,
+            deposito=self.deposito
         )
         # Asegurar que el usuario esté activo
         self.repo_user.is_active = True
@@ -336,7 +325,7 @@ class ProductoReponedorAPITestCase(BaseReponedorTestCase):
         """Test CA: El depósito se trae desde la asignación que le hizo el administrador"""
         
         # Verificar directamente desde el modelo ya que no hay endpoint para obtener info del empleado actual
-        self.assertEqual(self.empleado.deposito, self.deposito)
+        self.assertEqual(self.repo_user.deposito, self.deposito)
     
     def test_reponedor_validacion_campos_obligatorios(self):
         """Test CA: El sistema valida que los campos obligatorios estén completos (nombre, categoría, precio)"""

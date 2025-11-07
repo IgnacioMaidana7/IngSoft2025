@@ -20,7 +20,6 @@ from authentication.permissions import IsReponedorOrAdmin
 from productos.models import ProductoDeposito
 from notificaciones.models import Notificacion
 from authentication.models import EmpleadoUser
-from empleados.models import Empleado
 
 
 class DepositoListCreateView(generics.ListCreateAPIView):
@@ -125,13 +124,13 @@ def estadisticas_depositos(request):
         ).count()
         depositos_inactivos = total_depositos - depositos_activos
         
-        # Contar empleados por depósito (si la relación existe)
+        # Contar empleados por depósito usando EmpleadoUser
         try:
-            from empleados.models import Empleado
+            from authentication.models import EmpleadoUser
             depositos_con_empleados = Deposito.objects.filter(
                 supermercado=supermercado_filter
             ).annotate(
-                total_empleados=Count('empleados', filter=Q(empleados__activo=True))
+                total_empleados=Count('empleados_usuarios', filter=Q(empleados_usuarios__activo=True))
             ).values('id', 'nombre', 'total_empleados')
         except ImportError:
             depositos_con_empleados = []
@@ -173,21 +172,14 @@ class TransferenciaListCreateView(generics.ListCreateAPIView):
         
         # Si es un empleado (reponedor)
         if isinstance(user, EmpleadoUser):
-            # Obtener el depósito asignado al empleado
-            try:
-                empleado = Empleado.objects.get(
-                    email=user.email,
-                    supermercado=user.supermercado
-                )
-                if empleado.deposito:
-                    # Mostrar transferencias donde su depósito está involucrado (origen o destino)
-                    return Transferencia.objects.filter(
-                        Q(deposito_origen=empleado.deposito) | Q(deposito_destino=empleado.deposito)
-                    ).select_related(
-                        'deposito_origen', 'deposito_destino', 'administrador'
-                    ).prefetch_related('detalles').order_by('-fecha_transferencia')
-            except Empleado.DoesNotExist:
-                pass
+            # El depósito está directamente en EmpleadoUser
+            if user.deposito:
+                # Mostrar transferencias donde su depósito está involucrado (origen o destino)
+                return Transferencia.objects.filter(
+                    Q(deposito_origen=user.deposito) | Q(deposito_destino=user.deposito)
+                ).select_related(
+                    'deposito_origen', 'deposito_destino', 'administrador'
+                ).prefetch_related('detalles').order_by('-fecha_transferencia')
             
             # Si no tiene depósito asignado, no mostrar nada
             return Transferencia.objects.none()
@@ -212,21 +204,14 @@ class TransferenciaDetailView(generics.RetrieveUpdateDestroyAPIView):
         
         # Si es un empleado (reponedor)
         if isinstance(user, EmpleadoUser):
-            # Obtener el depósito asignado al empleado
-            try:
-                empleado = Empleado.objects.get(
-                    email=user.email,
-                    supermercado=user.supermercado
-                )
-                if empleado.deposito:
-                    # Puede acceder a transferencias donde su depósito está involucrado
-                    return Transferencia.objects.filter(
-                        Q(deposito_origen=empleado.deposito) | Q(deposito_destino=empleado.deposito)
-                    ).select_related(
-                        'deposito_origen', 'deposito_destino', 'administrador'
-                    ).prefetch_related('detalles')
-            except Empleado.DoesNotExist:
-                pass
+            # El depósito está directamente en EmpleadoUser
+            if user.deposito:
+                # Puede acceder a transferencias donde su depósito está involucrado
+                return Transferencia.objects.filter(
+                    Q(deposito_origen=user.deposito) | Q(deposito_destino=user.deposito)
+                ).select_related(
+                    'deposito_origen', 'deposito_destino', 'administrador'
+                ).prefetch_related('detalles')
             
             # Si no tiene depósito asignado, no puede acceder
             return Transferencia.objects.none()
@@ -255,20 +240,16 @@ class TransferenciaDetailView(generics.RetrieveUpdateDestroyAPIView):
         
         # Si es un empleado (reponedor), solo puede eliminar si es del depósito origen
         if isinstance(user, EmpleadoUser):
-            try:
-                empleado = Empleado.objects.get(
-                    email=user.email,
-                    supermercado=user.supermercado
-                )
-                if transferencia.deposito_origen != empleado.deposito:
-                    return Response({
-                        'success': False,
-                        'error': 'Solo puedes eliminar transferencias creadas desde tu depósito'
-                    }, status=status.HTTP_403_FORBIDDEN)
-            except Empleado.DoesNotExist:
+            if not user.deposito:
                 return Response({
                     'success': False,
-                    'error': 'Empleado no encontrado'
+                    'error': 'Empleado sin depósito asignado'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            if transferencia.deposito_origen != user.deposito:
+                return Response({
+                    'success': False,
+                    'error': 'Solo puedes eliminar transferencias creadas desde tu depósito'
                 }, status=status.HTTP_403_FORBIDDEN)
         
         # Eliminar la transferencia (y sus detalles por CASCADE)
@@ -292,28 +273,30 @@ def confirmar_transferencia(request, transferencia_id):
         # Si es un empleado (reponedor)
         if isinstance(user, EmpleadoUser):
             # Solo puede confirmar transferencias que llegan a su depósito
-            try:
-                empleado = Empleado.objects.get(
-                    email=user.email,
-                    supermercado=user.supermercado
-                )
-                if not empleado.deposito:
-                    return Response({
-                        'success': False,
-                        'error': 'No tienes un depósito asignado'
-                    }, status=status.HTTP_403_FORBIDDEN)
-                
-                # La transferencia debe tener como destino el depósito del empleado
-                transferencia = get_object_or_404(
-                    Transferencia, 
-                    id=transferencia_id,
-                    deposito_destino=empleado.deposito
-                )
-            except Empleado.DoesNotExist:
+            if not hasattr(user, 'deposito') or not user.deposito:
                 return Response({
                     'success': False,
-                    'error': 'Empleado no encontrado'
+                    'error': 'No tienes un depósito asignado'
                 }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Verificar si la transferencia existe y validar permisos
+            try:
+                transferencia_temp = Transferencia.objects.get(id=transferencia_id)
+                
+                # Verificar si el depósito destino coincide con el del empleado
+                if transferencia_temp.deposito_destino.id != user.deposito.id:
+                    return Response({
+                        'success': False,
+                        'error': f'No tienes permiso para confirmar esta transferencia. Solo puedes confirmar transferencias que llegan a tu depósito ({user.deposito.nombre}). Esta transferencia va hacia {transferencia_temp.deposito_destino.nombre}.'
+                    }, status=status.HTTP_403_FORBIDDEN)
+                
+                transferencia = transferencia_temp
+                
+            except Transferencia.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'error': f'La transferencia {transferencia_id} no existe'
+                }, status=status.HTTP_404_NOT_FOUND)
         else:
             # Si es admin, puede confirmar cualquier transferencia de su supermercado
             transferencia = get_object_or_404(
@@ -344,12 +327,15 @@ def confirmar_transferencia(request, transferencia_id):
             # Procesar cada detalle de la transferencia
             for detalle in transferencia.detalles.all():
                 # Reducir stock en origen
-                stock_origen = ProductoDeposito.objects.get(
-                    producto=detalle.producto,
-                    deposito=transferencia.deposito_origen
-                )
-                stock_origen.cantidad -= detalle.cantidad
-                stock_origen.save()
+                try:
+                    stock_origen = ProductoDeposito.objects.get(
+                        producto=detalle.producto,
+                        deposito=transferencia.deposito_origen
+                    )
+                    stock_origen.cantidad -= detalle.cantidad
+                    stock_origen.save()
+                except ProductoDeposito.DoesNotExist:
+                    raise Exception(f"No existe stock en el depósito origen para el producto {detalle.producto.nombre}")
                 
                 # Aumentar stock en destino (crear si no existe)
                 stock_destino, created = ProductoDeposito.objects.get_or_create(
@@ -389,6 +375,7 @@ def confirmar_transferencia(request, transferencia_id):
                     observaciones=f'Transferencia {transferencia.id} - Entrada'
                 )
             
+            print(f"DEBUG - Enviando notificaciones")
             # Enviar notificaciones a reponedores
             _enviar_notificaciones_transferencia(transferencia)
         
@@ -415,58 +402,42 @@ def _enviar_notificaciones_transferencia(transferencia):
             is_active=True
         )
         
-        # Filtrar por depósito específico si es posible
-        empleados_origen = Empleado.objects.filter(
+        # Filtrar reponedores del depósito origen directamente desde EmpleadoUser
+        empleados_origen = EmpleadoUser.objects.filter(
             deposito=transferencia.deposito_origen,
             puesto='REPONEDOR',
-            activo=True
+            activo=True,
+            is_active=True
         )
         
-        for empleado in empleados_origen:
-            try:
-                empleado_user = EmpleadoUser.objects.get(
-                    email=empleado.email,
-                    supermercado=transferencia.administrador,
-                    is_active=True
-                )
-                Notificacion.objects.create(
-                    empleado=empleado_user,
-                    titulo=f"Transferencia de productos - Salida",
-                    mensaje=f"Se ha realizado una transferencia desde {transferencia.deposito_origen.nombre} "
-                           f"hacia {transferencia.deposito_destino.nombre}. Revisa los productos transferidos.",
-                    tipo="INFO"
-                )
-            except EmpleadoUser.DoesNotExist:
-                continue
+        for empleado_user in empleados_origen:
+            Notificacion.objects.create(
+                empleado=empleado_user,
+                titulo=f"Transferencia de productos - Salida",
+                mensaje=f"Se ha realizado una transferencia desde {transferencia.deposito_origen.nombre} "
+                       f"hacia {transferencia.deposito_destino.nombre}. Revisa los productos transferidos.",
+                tipo="INFO"
+            )
         
         # Notificar reponedores del depósito destino
-        empleados_destino = Empleado.objects.filter(
+        empleados_destino = EmpleadoUser.objects.filter(
             deposito=transferencia.deposito_destino,
             puesto='REPONEDOR',
-            activo=True
+            activo=True,
+            is_active=True
         )
         
-        for empleado in empleados_destino:
-            try:
-                empleado_user = EmpleadoUser.objects.get(
-                    email=empleado.email,
-                    supermercado=transferencia.administrador,
-                    is_active=True
-                )
-                Notificacion.objects.create(
-                    empleado=empleado_user,
-                    titulo=f"Transferencia de productos - Entrada",
-                    mensaje=f"Se ha recibido una transferencia desde {transferencia.deposito_origen.nombre}. "
-                           f"Verifica la recepción de los productos.",
-                    tipo="INFO"
-                )
-            except EmpleadoUser.DoesNotExist:
-                continue
-                
+        for empleado_user in empleados_destino:
+            Notificacion.objects.create(
+                empleado=empleado_user,
+                titulo=f"Transferencia de productos - Entrada",
+                mensaje=f"Se ha recibido una transferencia desde {transferencia.deposito_origen.nombre}. "
+                       f"Verifica la recepción de los productos.",
+                tipo="INFO"
+            )
+        
     except Exception as e:
-        print(f"Error enviando notificaciones de transferencia: {e}")
-
-
+        pass
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def cancelar_transferencia(request, transferencia_id):
@@ -576,57 +547,43 @@ def cancelar_transferencia(request, transferencia_id):
 def _enviar_notificaciones_cancelacion(transferencia):
     """Función auxiliar para enviar notificaciones sobre cancelación de transferencias"""
     try:
-        # Notificar reponedores del depósito origen
-        empleados_origen = Empleado.objects.filter(
+        # Notificar reponedores del depósito origen directamente desde EmpleadoUser
+        empleados_origen = EmpleadoUser.objects.filter(
             deposito=transferencia.deposito_origen,
             puesto='REPONEDOR',
-            activo=True
+            activo=True,
+            is_active=True
         )
         
-        for empleado in empleados_origen:
-            try:
-                empleado_user = EmpleadoUser.objects.get(
-                    email=empleado.email,
-                    supermercado=transferencia.administrador,
-                    is_active=True
-                )
-                Notificacion.objects.create(
-                    empleado=empleado_user,
-                    titulo=f"Transferencia CANCELADA - Productos devueltos",
-                    mensaje=f"La transferencia desde {transferencia.deposito_origen.nombre} "
-                           f"hacia {transferencia.deposito_destino.nombre} ha sido CANCELADA. "
-                           f"Los productos han sido devueltos al depósito origen.",
-                    tipo="ALERTA"
-                )
-            except EmpleadoUser.DoesNotExist:
-                continue
+        for empleado_user in empleados_origen:
+            Notificacion.objects.create(
+                empleado=empleado_user,
+                titulo=f"Transferencia CANCELADA - Productos devueltos",
+                mensaje=f"La transferencia desde {transferencia.deposito_origen.nombre} "
+                       f"hacia {transferencia.deposito_destino.nombre} ha sido CANCELADA. "
+                       f"Los productos han sido devueltos al depósito origen.",
+                tipo="ALERTA"
+            )
         
         # Notificar reponedores del depósito destino
-        empleados_destino = Empleado.objects.filter(
+        empleados_destino = EmpleadoUser.objects.filter(
             deposito=transferencia.deposito_destino,
             puesto='REPONEDOR',
-            activo=True
+            activo=True,
+            is_active=True
         )
         
-        for empleado in empleados_destino:
-            try:
-                empleado_user = EmpleadoUser.objects.get(
-                    email=empleado.email,
-                    supermercado=transferencia.administrador,
-                    is_active=True
-                )
-                Notificacion.objects.create(
-                    empleado=empleado_user,
-                    titulo=f"Transferencia CANCELADA",
-                    mensaje=f"La transferencia desde {transferencia.deposito_origen.nombre} "
-                           f"ha sido CANCELADA. Los productos han sido retirados del inventario.",
-                    tipo="ALERTA"
-                )
-            except EmpleadoUser.DoesNotExist:
-                continue
+        for empleado_user in empleados_destino:
+            Notificacion.objects.create(
+                empleado=empleado_user,
+                titulo=f"Transferencia CANCELADA",
+                mensaje=f"La transferencia desde {transferencia.deposito_origen.nombre} "
+                       f"ha sido CANCELADA. Los productos han sido retirados del inventario.",
+                tipo="ALERTA"
+            )
                 
     except Exception as e:
-        print(f"Error enviando notificaciones de cancelación: {e}")
+        pass
 
 
 class HistorialMovimientoListView(generics.ListAPIView):
@@ -641,23 +598,16 @@ class HistorialMovimientoListView(generics.ListAPIView):
         
         # Si es un empleado (reponedor), puede ver movimientos de su depósito
         if isinstance(user, EmpleadoUser):
-            try:
-                empleado = Empleado.objects.get(
-                    email=user.email,
-                    supermercado=user.supermercado
-                )
-                if empleado.deposito:
-                    # Ver movimientos donde su depósito está involucrado
-                    return HistorialMovimiento.objects.filter(
-                        Q(deposito_origen=empleado.deposito) | Q(deposito_destino=empleado.deposito),
-                        cantidad__gt=0  # Solo movimientos de entrada (evita duplicados)
-                    ).select_related(
-                        'producto', 'producto__categoria',
-                        'deposito_origen', 'deposito_destino', 
-                        'administrador', 'transferencia'
-                    ).order_by('-fecha')
-            except Empleado.DoesNotExist:
-                pass
+            if user.deposito:
+                # Ver movimientos donde su depósito está involucrado
+                return HistorialMovimiento.objects.filter(
+                    Q(deposito_origen=user.deposito) | Q(deposito_destino=user.deposito),
+                    cantidad__gt=0  # Solo movimientos de entrada (evita duplicados)
+                ).select_related(
+                    'producto', 'producto__categoria',
+                    'deposito_origen', 'deposito_destino', 
+                    'administrador', 'transferencia'
+                ).order_by('-fecha')
             
             # Si no tiene depósito, no puede ver historial
             return HistorialMovimiento.objects.none()
@@ -696,19 +646,30 @@ def generar_remito_pdf(request, transferencia_id):
     """
     Genera un PDF con formato de remito para una transferencia.
     """
+    from authentication.models import EmpleadoUser
+    
     try:
-        # Verificar que es un admin
-        if hasattr(request.user, 'supermercado'):
-            return Response({
-                'success': False,
-                'error': 'No tienes permisos para generar remitos'
-            }, status=status.HTTP_403_FORBIDDEN)
+        # Obtener la transferencia
+        transferencia = get_object_or_404(Transferencia, id=transferencia_id)
         
-        transferencia = get_object_or_404(
-            Transferencia, 
-            id=transferencia_id, 
-            administrador=request.user
-        )
+        # Verificar permisos según tipo de usuario
+        if isinstance(request.user, EmpleadoUser):
+            # Empleado: debe estar asignado al depósito origen o destino de la transferencia
+            empleado = request.user
+            
+            if empleado.deposito not in [transferencia.deposito_origen, transferencia.deposito_destino]:
+                return Response({
+                    'success': False,
+                    'error': 'No tienes permisos para generar este remito. Solo puedes generar remitos de transferencias de tu depósito.'
+                }, status=status.HTTP_403_FORBIDDEN)
+        else:
+            # Usuario administrador (User): debe ser el administrador de la transferencia
+            
+            if transferencia.administrador != request.user:
+                return Response({
+                    'success': False,
+                    'error': 'No tienes permisos para generar este remito'
+                }, status=status.HTTP_403_FORBIDDEN)
         
         # Solo se puede generar remito para transferencias confirmadas
         if transferencia.estado != 'CONFIRMADA':
@@ -767,11 +728,18 @@ def _generar_pdf_remito(transferencia):
     story.append(Paragraph(f"REMITO DE TRANSFERENCIA N° {transferencia.id}", title_style))
     story.append(Spacer(1, 20))
     
+    # Determinar el nombre del creador
+    if transferencia.empleado_creador:
+        nombre_creador = f"{transferencia.empleado_creador.nombre} {transferencia.empleado_creador.apellido} ({transferencia.empleado_creador.get_puesto_display()})"
+    else:
+        nombre_creador = "Administrador"
+    
     # Información de la transferencia
     data_info = [
         ['Fecha:', transferencia.fecha_transferencia.strftime('%d/%m/%Y %H:%M')],
         ['Depósito Origen:', transferencia.deposito_origen.nombre],
         ['Depósito Destino:', transferencia.deposito_destino.nombre],
+        ['Realizado por:', nombre_creador],
         ['Administrador:', transferencia.administrador.nombre_supermercado],
         ['Estado:', transferencia.get_estado_display()],
     ]

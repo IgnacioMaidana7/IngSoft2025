@@ -152,14 +152,8 @@ class ProductoCreateUpdateSerializer(serializers.ModelSerializer):
     def _get_user_deposito(self):
         request = self.context.get('request')
         if request and isinstance(request.user, EmpleadoUser):
-            # Obtener depósito desde el modelo Empleado relacionado por email
-            try:
-                from empleados.models import Empleado
-                emp = Empleado.objects.filter(email=request.user.email, supermercado=request.user.supermercado).first()
-                if emp:
-                    return emp.deposito
-            except Exception:
-                pass
+            # Obtener depósito directamente desde EmpleadoUser
+            return request.user.deposito
         return None
     
     def create(self, validated_data):

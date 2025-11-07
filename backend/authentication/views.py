@@ -36,9 +36,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         email = attrs.get('email')
         password = attrs.get('password')
 
-        print(f"DEBUG - Email recibido: {email}")
-        print(f"DEBUG - Password recibido: {'*' * len(password) if password else 'None'}")
-
         if not email or not password:
             raise serializers.ValidationError('Debe incluir "email" y "password".')
 
@@ -49,9 +46,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         try:
             # Verificar que exista el usuario para un mensaje de error más claro
             user = User.objects.get(email=normalized_email)
-            print(f"DEBUG - Usuario encontrado: {user.username}, activo: {user.is_active}")
         except User.DoesNotExist:
-            print(f"DEBUG - Usuario no encontrado con email: {normalized_email}")
             raise serializers.ValidationError('No existe un usuario con este email.')
 
         # Delegar autenticación al serializer padre (usa username_field='email')
@@ -71,9 +66,6 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = [AllowAny]
     
     def create(self, request, *args, **kwargs):
-        print(f"Request data: {request.data}")  # Debug logging
-        print(f"Request files: {request.FILES}")  # Debug logging
-        
         serializer = self.get_serializer(data=request.data)
         
         try:
@@ -91,7 +83,6 @@ class RegisterView(generics.CreateAPIView):
             else:
                 # Manejar errores de validación
                 errors = serializer.errors
-                print(f"Validation errors: {errors}")  # Debug logging
                 
                 # Formatear errores para el frontend
                 formatted_errors = {}
@@ -113,7 +104,8 @@ class RegisterView(generics.CreateAPIView):
             return Response(
                 {
                     'message': 'Error interno del servidor',
-                    'error': str(e)
+                    'error': str(e),
+                    'type': type(e).__name__
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -293,13 +285,10 @@ class ProvinciasProxyView(APIView):
                 params={'campos': 'id,nombre'},
                 timeout=30  # Aumentar timeout a 30 segundos
             )
-            print(f"📍 Respuesta recibida: {response.status_code}")
             response.raise_for_status()
             data = response.json()
-            print(f"📍 Datos obtenidos: {len(data.get('provincias', []))} provincias")
             return Response(data, status=status.HTTP_200_OK)
         except requests.exceptions.Timeout as e:
-            print(f"❌ Timeout en provincias: {e}")
             return Response(
                 {
                     'error': 'Timeout al conectar con el servicio de provincias',
@@ -309,7 +298,6 @@ class ProvinciasProxyView(APIView):
                 status=status.HTTP_504_GATEWAY_TIMEOUT
             )
         except requests.exceptions.RequestException as e:
-            print(f"❌ Error en provincias: {e}")
             return Response(
                 {
                     'error': 'Error al obtener provincias',
@@ -319,9 +307,6 @@ class ProvinciasProxyView(APIView):
                 status=status.HTTP_502_BAD_GATEWAY
             )
         except Exception as e:
-            print(f"❌ Error inesperado: {e}")
-            import traceback
-            traceback.print_exc()
             return Response(
                 {'error': f'Error inesperado: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -341,8 +326,6 @@ class LocalidadesProxyView(APIView):
             )
         
         try:
-            print(f"📍 Intentando obtener localidades para provincia: {provincia}")
-            
             # Configurar sesión con reintentos
             session = requests.Session()
             retry_strategy = requests.adapters.Retry(
@@ -363,13 +346,10 @@ class LocalidadesProxyView(APIView):
                 },
                 timeout=30  # Aumentar timeout a 30 segundos
             )
-            print(f"📍 Respuesta recibida: {response.status_code}")
             response.raise_for_status()
             data = response.json()
-            print(f"📍 Datos obtenidos: {len(data.get('localidades', []))} localidades")
             return Response(data, status=status.HTTP_200_OK)
         except requests.exceptions.Timeout as e:
-            print(f"❌ Timeout en localidades: {e}")
             return Response(
                 {
                     'error': 'Timeout al conectar con el servicio de localidades',
@@ -379,7 +359,6 @@ class LocalidadesProxyView(APIView):
                 status=status.HTTP_504_GATEWAY_TIMEOUT
             )
         except requests.exceptions.RequestException as e:
-            print(f"❌ Error en localidades: {e}")
             return Response(
                 {
                     'error': 'Error al obtener localidades',
@@ -389,10 +368,124 @@ class LocalidadesProxyView(APIView):
                 status=status.HTTP_502_BAD_GATEWAY
             )
         except Exception as e:
-            print(f"❌ Error inesperado: {e}")
-            import traceback
-            traceback.print_exc()
             return Response(
                 {'error': f'Error inesperado: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+class EmpleadoListCreateView(generics.ListCreateAPIView):
+    """Vista para listar y crear empleados"""
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # Desactivar paginación para retornar lista directa
+    
+    def get_serializer_class(self):
+        from .serializers import EmpleadoUserSerializer, EmpleadoRegistrationSerializer
+        if self.request.method == 'POST':
+            return EmpleadoRegistrationSerializer
+        return EmpleadoUserSerializer
+    
+    def get_serializer_context(self):
+        """Agregar el supermercado al contexto del serializer"""
+        context = super().get_serializer_context()
+        context['supermercado'] = self.request.user
+        return context
+    
+    def get_queryset(self):
+        """Filtrar empleados del supermercado autenticado"""
+        user = self.request.user
+        if hasattr(user, 'empleados_usuarios'):
+            # Si es un User (supermercado), mostrar sus empleados
+            return EmpleadoUser.objects.filter(supermercado=user)
+        return EmpleadoUser.objects.none()
+    
+    def perform_create(self, serializer):
+        """El supermercado ya se asigna en el serializer"""
+        serializer.save()
+
+
+class EmpleadoDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Vista para ver, actualizar y eliminar un empleado específico"""
+    permission_classes = [IsAuthenticated]
+    
+    def get_serializer_class(self):
+        from .serializers import EmpleadoUserSerializer, EmpleadoUpdateSerializer
+        if self.request.method in ['PUT', 'PATCH']:
+            return EmpleadoUpdateSerializer
+        return EmpleadoUserSerializer
+    
+    def get_queryset(self):
+        """Solo permitir acceso a empleados del supermercado autenticado"""
+        user = self.request.user
+        if hasattr(user, 'empleados_usuarios'):
+            return EmpleadoUser.objects.filter(supermercado=user)
+        return EmpleadoUser.objects.none()
+
+
+class RolesListView(APIView):
+    """Vista para obtener la lista de roles disponibles"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Retornar los roles disponibles"""
+        roles = [
+            {'value': choice[0], 'label': choice[1]}
+            for choice in EmpleadoUser.ROLES_CHOICES
+        ]
+        return Response({
+            'success': True,
+            'roles': roles
+        }, status=status.HTTP_200_OK)
+
+
+class EstadisticasEmpleadosView(APIView):
+    """Vista para obtener estadísticas de empleados"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Retornar estadísticas de empleados del supermercado"""
+        from django.db.models import Count
+        
+        user = request.user
+        
+        # Filtrar empleados del supermercado autenticado
+        empleados = EmpleadoUser.objects.filter(supermercado=user)
+        
+        # Contar totales
+        total_empleados = empleados.count()
+        empleados_activos = empleados.filter(is_active=True).count()
+        empleados_inactivos = empleados.filter(is_active=False).count()
+        
+        # Empleados por puesto
+        empleados_por_puesto = list(
+            empleados.values('puesto')
+            .annotate(total=Count('id'))
+            .order_by('puesto')
+        )
+        
+        # Empleados por depósito
+        empleados_por_deposito = list(
+            empleados.values('deposito__id', 'deposito__nombre')
+            .annotate(total_empleados=Count('id'))
+            .order_by('deposito__nombre')
+        )
+        
+        # Formatear empleados_por_deposito
+        empleados_por_deposito_formatted = [
+            {
+                'id': item['deposito__id'],
+                'nombre': item['deposito__nombre'],
+                'total_empleados': item['total_empleados']
+            }
+            for item in empleados_por_deposito
+        ]
+        
+        return Response({
+            'success': True,
+            'data': {
+                'total_empleados': total_empleados,
+                'empleados_activos': empleados_activos,
+                'empleados_inactivos': empleados_inactivos,
+                'empleados_por_puesto': empleados_por_puesto,
+                'empleados_por_deposito': empleados_por_deposito_formatted
+            }
+        }, status=status.HTTP_200_OK)

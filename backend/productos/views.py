@@ -16,7 +16,6 @@ from .serializers import (
 from inventario.models import Deposito
 from authentication.permissions import IsReponedorOrAdmin
 from authentication.models import EmpleadoUser
-from empleados.models import Empleado
 
 class ProductoPagination(PageNumberPagination):
     page_size = 20
@@ -138,9 +137,7 @@ class ProductoListCreateView(generics.ListCreateAPIView):
         user = self.request.user
         if isinstance(user, EmpleadoUser):
             if not deposito_id:
-                emp = Empleado.objects.filter(email=user.email, supermercado=user.supermercado).first()
-                if emp:
-                    deposito_id = str(emp.deposito_id)
+                deposito_id = str(user.deposito_id)
 
         if categoria_id:
             queryset = queryset.filter(categoria_id=categoria_id)
@@ -269,11 +266,7 @@ def gestionar_stock_producto(request, producto_id):
         user = request.user
         if isinstance(user, EmpleadoUser):
             # Reponedor: solo su depósito
-            emp = Empleado.objects.filter(email=user.email, supermercado=user.supermercado).first()
-            if emp:
-                stocks_qs = stocks_qs.filter(deposito=emp.deposito)
-            else:
-                return Response({"detail": "Empleado sin depósito asignado"}, status=status.HTTP_403_FORBIDDEN)
+            stocks_qs = stocks_qs.filter(deposito=user.deposito)
         elif hasattr(user, 'depositos'):
             # Admin: solo sus depósitos
             stocks_qs = stocks_qs.filter(deposito__supermercado=user)
@@ -286,11 +279,7 @@ def gestionar_stock_producto(request, producto_id):
         data = request.data.copy()
         # Forzar depósito del reponedor si corresponde
         if isinstance(request.user, EmpleadoUser):
-            from empleados.models import Empleado
-            emp = Empleado.objects.filter(email=request.user.email, supermercado=request.user.supermercado).first()
-            if not emp:
-                return Response({"detail": "Empleado sin depósito asignado"}, status=status.HTTP_403_FORBIDDEN)
-            data['deposito'] = emp.deposito.id
+            data['deposito'] = request.user.deposito.id
         serializer = ProductoDepositoSerializer(data=data)
         if serializer.is_valid():
             deposito_id = serializer.validated_data['deposito'].id
@@ -307,9 +296,7 @@ def stock_producto_detail(request, stock_id):
     stock = get_object_or_404(ProductoDeposito, id=stock_id)
     # Repos: restringir a su depósito
     if isinstance(request.user, EmpleadoUser):
-        from empleados.models import Empleado
-        emp = Empleado.objects.filter(email=request.user.email, supermercado=request.user.supermercado).first()
-        if not emp or stock.deposito_id != emp.deposito_id:
+        if stock.deposito_id != request.user.deposito_id:
             return Response({"detail": "No tiene acceso a este recurso"}, status=status.HTTP_403_FORBIDDEN)
     
     if request.method == 'GET':
@@ -376,12 +363,7 @@ def obtener_stock_completo_producto(request, producto_id):
         
         # Para reponedores, solo mostrar su depósito asignado
         if isinstance(user, EmpleadoUser):
-            from empleados.models import Empleado
-            emp = Empleado.objects.filter(email=user.email, supermercado=user.supermercado).first()
-            if emp:
-                depositos = depositos.filter(id=emp.deposito_id)
-            else:
-                return Response({"detail": "Empleado sin depósito asignado"}, status=status.HTTP_403_FORBIDDEN)
+            depositos = depositos.filter(id=user.deposito_id)
         
         resultado = []
         for deposito in depositos:
@@ -437,13 +419,8 @@ def actualizar_stock_completo_producto(request, producto_id):
         
         # Para reponedores, verificar que solo actualicen su depósito
         if isinstance(user, EmpleadoUser):
-            from empleados.models import Empleado
-            emp = Empleado.objects.filter(email=user.email, supermercado=user.supermercado).first()
-            if not emp:
-                return Response({"detail": "Empleado sin depósito asignado"}, status=status.HTTP_403_FORBIDDEN)
-            
             # Filtrar solo el depósito del reponedor
-            stocks_data = [s for s in stocks_data if s.get('deposito_id') == emp.deposito_id]
+            stocks_data = [s for s in stocks_data if s.get('deposito_id') == user.deposito_id]
         
         resultados = []
         
@@ -577,10 +554,13 @@ def estadisticas_productos(request):
 def productos_mi_deposito(request):
     """Obtener productos del depósito asignado al reponedor actual con información de stock"""
     try:
-        # Obtener el empleado asociado al usuario actual
-        empleado_user = EmpleadoUser.objects.get(user=request.user)
-        empleado = empleado_user.empleado
-        deposito = empleado.deposito
+        # El usuario es directamente EmpleadoUser
+        if not isinstance(request.user, EmpleadoUser):
+            return Response({
+                'error': 'Usuario no es un empleado'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        deposito = request.user.deposito
         
         # Obtener productos con stock en el depósito del reponedor
         stocks = ProductoDeposito.objects.filter(

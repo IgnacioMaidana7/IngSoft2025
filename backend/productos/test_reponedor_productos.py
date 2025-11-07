@@ -10,7 +10,6 @@ import uuid
 
 from .models import Categoria, Producto, ProductoDeposito
 from inventario.models import Deposito
-from empleados.models import Empleado
 from authentication.models import EmpleadoUser
 from notificaciones.models import Notificacion
 
@@ -46,24 +45,17 @@ class ProductoModelTestCase(TestCase):
             descripcion='Bebidas en general'
         )
         
-        # Crear empleado reponedor
-        self.empleado_repo = Empleado.objects.create(
-            nombre='María',
-            apellido='González',
-            email='maria@test.com',
-            dni='87654321',
-            puesto='REPONEDOR',
-            deposito=self.deposito,
-            supermercado=self.admin_user
-        )
-        
-        # Crear usuario EmpleadoUser para el reponedor
+        # Crear usuario EmpleadoUser para el reponedor con depósito asignado
         self.repo_user = EmpleadoUser.objects.create_user(
             username='maria_repo',
             email='maria@test.com',
             password='testpass123',
+            first_name='María',
+            last_name='González',
+            dni='87654321',
             puesto='REPONEDOR',
-            supermercado=self.admin_user
+            supermercado=self.admin_user,
+            deposito=self.deposito
         )
     
     def test_crear_producto_campos_obligatorios(self):
@@ -255,43 +247,30 @@ class ProductoReponedorAPITestCase(TransactionTestCase):
             descripcion='Snacks y golosinas'
         )
         
-        # Crear empleado reponedor
-        self.empleado_repo = Empleado.objects.create(
-            nombre='María',
-            apellido='González',
-            email=f'maria{self.test_id}@test.com',
-            dni=f'8765432{self.test_id}',
-            puesto='REPONEDOR',
-            deposito=self.deposito1,  # Asignado al depósito 1
-            supermercado=self.admin_user
-        )
-        
         # Crear usuario EmpleadoUser para el reponedor
         self.repo_user = EmpleadoUser.objects.create_user(
             username=f'maria{self.test_id}_repo',
             email=f'maria{self.test_id}@test.com',
             password='testpass123',
+            first_name='María',
+            last_name='González',
+            dni=f'8765432{self.test_id}',
             puesto='REPONEDOR',
-            supermercado=self.admin_user
+            supermercado=self.admin_user,
+            deposito=self.deposito1  # Asignado al depósito 1
         )
         
         # Crear segundo reponedor para otro depósito
-        self.empleado_repo2 = Empleado.objects.create(
-            nombre='Carlos',
-            apellido='López',
-            email=f'carlos{self.test_id}@test.com',
-            dni=f'1111111{self.test_id}',
-            puesto='REPONEDOR',
-            deposito=self.deposito2,  # Asignado al depósito 2
-            supermercado=self.admin_user
-        )
-        
         self.repo_user2 = EmpleadoUser.objects.create_user(
             username=f'carlos{self.test_id}_repo',
             email=f'carlos{self.test_id}@test.com',
             password='testpass123',
+            first_name='Carlos',
+            last_name='López',
+            dni=f'1111111{self.test_id}',
             puesto='REPONEDOR',
-            supermercado=self.admin_user
+            supermercado=self.admin_user,
+            deposito=self.deposito2  # Asignado al depósito 2
         )
         
         # URLs
@@ -303,7 +282,6 @@ class ProductoReponedorAPITestCase(TransactionTestCase):
         ProductoDeposito.objects.all().delete()
         Producto.objects.all().delete()
         Categoria.objects.all().delete()
-        Empleado.objects.all().delete()
         EmpleadoUser.objects.all().delete()
         Deposito.objects.all().delete()
         User.objects.all().delete()
@@ -801,24 +779,17 @@ class NotificacionStockMinimoTestCase(TransactionTestCase):
             precio=150.00
         )
         
-        # Crear empleado reponedor
-        self.empleado_repo = Empleado.objects.create(
-            nombre='María',
-            apellido='González',
-            email='maria@test.com',
-            dni='87654321',
-            puesto='REPONEDOR',
-            deposito=self.deposito,
-            supermercado=self.admin_user
-        )
-        
         # Crear usuario EmpleadoUser para el reponedor
         self.repo_user = EmpleadoUser.objects.create_user(
             username='maria_repo',
             email='maria@test.com',
             password='testpass123',
+            first_name='María',
+            last_name='González',
+            dni='87654321',
             puesto='REPONEDOR',
-            supermercado=self.admin_user
+            supermercado=self.admin_user,
+            deposito=self.deposito
         )
     
     def tearDown(self):
@@ -828,7 +799,6 @@ class NotificacionStockMinimoTestCase(TransactionTestCase):
         Producto.objects.all().delete()
         Categoria.objects.all().delete()
         EmpleadoUser.objects.all().delete()
-        Empleado.objects.all().delete()
         Deposito.objects.all().delete()
         User.objects.all().delete()
     
@@ -920,22 +890,17 @@ class NotificacionStockMinimoTestCase(TransactionTestCase):
         """Test: Notificar a múltiples reponedores del mismo depósito"""
         
         # Crear segundo reponedor en el mismo depósito
-        empleado_repo2 = Empleado.objects.create(
-            nombre='Carlos',
-            apellido='López',
-            email=f'carlos{self.test_id}@test.com',
-            dni=f'1111111{self.test_id}',
-            puesto='REPONEDOR',
-            deposito=self.deposito,  # Mismo depósito
-            supermercado=self.admin_user
-        )
-        
         repo_user2 = EmpleadoUser.objects.create_user(
             username=f'carlos{self.test_id}_repo',
             email=f'carlos{self.test_id}@test.com',
             password='testpass123',
+            first_name='Carlos',
+            last_name='López',
+            email=f'carlos{self.test_id}@test.com',
+            dni=f'1111111{self.test_id}',
             puesto='REPONEDOR',
-            supermercado=self.admin_user
+            supermercado=self.admin_user,
+            deposito=self.deposito  # Mismo depósito
         )
         
         # Crear stock que active notificación
@@ -998,23 +963,17 @@ class ProductoStockAPITestCase(TransactionTestCase):
             precio=150.00
         )
         
-        # Crear empleado reponedor
-        self.empleado_repo = Empleado.objects.create(
-            nombre='María',
-            apellido='González',
-            email=f'maria{self.test_id}@test.com',
-            dni=f'8765432{self.test_id}',
-            puesto='REPONEDOR',
-            deposito=self.deposito,
-            supermercado=self.admin_user
-        )
-        
+        # Crear usuario EmpleadoUser reponedor
         self.repo_user = EmpleadoUser.objects.create_user(
             username=f'maria{self.test_id}_repo',
             email=f'maria{self.test_id}@test.com',
             password='testpass123',
+            first_name='María',
+            last_name='González',
+            dni=f'8765432{self.test_id}',
             puesto='REPONEDOR',
-            supermercado=self.admin_user
+            supermercado=self.admin_user,
+            deposito=self.deposito
         )
     
     def tearDown(self):
@@ -1023,7 +982,6 @@ class ProductoStockAPITestCase(TransactionTestCase):
         Producto.objects.all().delete()
         Categoria.objects.all().delete()
         EmpleadoUser.objects.all().delete()
-        Empleado.objects.all().delete()
         Deposito.objects.all().delete()
         User.objects.all().delete()
     

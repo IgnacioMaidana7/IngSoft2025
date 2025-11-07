@@ -129,8 +129,18 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         password = validated_data.pop('password')
         validated_data.pop('password_confirm')
         
-        # Generar username desde email
-        validated_data['username'] = validated_data['email'].split('@')[0]
+        # Generar username único desde email si no se proporciona
+        if 'username' not in validated_data or not validated_data.get('username'):
+            base_username = validated_data['email'].split('@')[0]
+            username = base_username
+            counter = 1
+            
+            # Asegurar que el username sea único
+            while User.objects.filter(username=username).exists():
+                username = f"{base_username}{counter}"
+                counter += 1
+            
+            validated_data['username'] = username
         
         # Crear usuario
         user = User.objects.create_user(
@@ -197,33 +207,25 @@ class EmpleadoUserSerializer(serializers.ModelSerializer):
     supermercado_nombre = serializers.CharField(source='supermercado.nombre_supermercado', read_only=True)
     deposito_id = serializers.SerializerMethodField()
     deposito_nombre = serializers.SerializerMethodField()
+    fecha_ingreso = serializers.DateTimeField(source='fecha_registro', read_only=True)
+    fecha_modificacion = serializers.DateTimeField(read_only=True)
     
     class Meta:
         model = EmpleadoUser
         fields = [
             'id', 'email', 'nombre', 'apellido', 'nombre_completo', 
             'dni', 'puesto', 'supermercado_nombre', 'deposito_id', 'deposito_nombre',
-            'fecha_registro', 'is_active'
+            'fecha_registro', 'fecha_ingreso', 'fecha_modificacion', 'is_active'
         ]
-        read_only_fields = ['id', 'fecha_registro']
+        read_only_fields = ['id', 'fecha_registro', 'fecha_ingreso', 'fecha_modificacion']
     
     def get_deposito_id(self, obj):
         """Obtiene el ID del depósito asignado al empleado"""
-        try:
-            from empleados.models import Empleado
-            empleado = Empleado.objects.filter(email=obj.email, supermercado=obj.supermercado).first()
-            return empleado.deposito.id if empleado and empleado.deposito else None
-        except Exception:
-            return None
+        return obj.deposito.id if obj.deposito else None
     
     def get_deposito_nombre(self, obj):
         """Obtiene el nombre del depósito asignado al empleado"""
-        try:
-            from empleados.models import Empleado
-            empleado = Empleado.objects.filter(email=obj.email, supermercado=obj.supermercado).first()
-            return empleado.deposito.nombre if empleado and empleado.deposito else None
-        except Exception:
-            return None
+        return obj.deposito.nombre if obj.deposito else None
 
 
 class SupermercadoLoginSerializer(serializers.Serializer):
@@ -362,3 +364,121 @@ class ChangePasswordSerializer(serializers.Serializer):
         user.set_password(self.validated_data['new_password'])
         user.save()
         return user
+
+
+class EmpleadoRegistrationSerializer(serializers.ModelSerializer):
+    """Serializer para crear nuevos empleados"""
+    
+    password = serializers.CharField(write_only=True, min_length=8)
+    password_confirm = serializers.CharField(write_only=True, required=False)
+    deposito = serializers.IntegerField(write_only=True)
+    
+    class Meta:
+        model = EmpleadoUser
+        fields = [
+            'email', 'nombre', 'apellido', 'dni', 'puesto',
+            'deposito', 'password', 'password_confirm'
+        ]
+    
+    def validate(self, attrs):
+        """Validar que las contraseñas coincidan"""
+        # Si no se proporciona password_confirm, usar el mismo password
+        if 'password_confirm' not in attrs or not attrs['password_confirm']:
+            attrs['password_confirm'] = attrs['password']
+        
+        if attrs['password'] != attrs['password_confirm']:
+            raise serializers.ValidationError({
+                'password_confirm': 'Las contraseñas no coinciden'
+            })
+        
+        # Validar DNI
+        dni = attrs.get('dni', '')
+        if not dni.isdigit() or len(dni) < 7 or len(dni) > 8:
+            raise serializers.ValidationError({
+                'dni': 'El DNI debe tener entre 7 y 8 dígitos'
+            })
+        
+        return attrs
+    
+    def create(self, validated_data):
+        """Crear nuevo empleado"""
+        from inventario.models import Deposito
+        
+        # Remover campos que no van directamente al modelo
+        password = validated_data.pop('password')
+        validated_data.pop('password_confirm')
+        deposito_id = validated_data.pop('deposito')
+        
+        # Obtener el supermercado del contexto
+        supermercado = self.context.get('supermercado')
+        if not supermercado:
+            raise serializers.ValidationError({
+                'supermercado': 'No se pudo identificar el supermercado'
+            })
+        
+        # Obtener el depósito y validar que pertenezca al supermercado
+        try:
+            deposito = Deposito.objects.get(id=deposito_id, supermercado=supermercado)
+        except Deposito.DoesNotExist:
+            raise serializers.ValidationError({
+                'deposito': 'El depósito especificado no existe o no pertenece a su supermercado'
+            })
+        
+        # Generar username único desde email
+        base_username = validated_data['email'].split('@')[0]
+        username = base_username
+        counter = 1
+        
+        while EmpleadoUser.objects.filter(username=username).exists():
+            username = f"{base_username}{counter}"
+            counter += 1
+        
+        validated_data['username'] = username
+        validated_data['deposito'] = deposito
+        validated_data['supermercado'] = supermercado
+        
+        # Crear empleado
+        empleado = EmpleadoUser.objects.create_user(
+            password=password,
+            **validated_data
+        )
+        
+        return empleado
+
+
+class EmpleadoUpdateSerializer(serializers.ModelSerializer):
+    """Serializer para actualizar empleados"""
+    
+    deposito = serializers.IntegerField(required=False)
+    
+    class Meta:
+        model = EmpleadoUser
+        fields = ['email', 'nombre', 'apellido', 'dni', 'puesto', 'deposito', 'is_active']
+    
+    def validate_dni(self, value):
+        """Validar formato de DNI"""
+        if not value.isdigit() or len(value) < 7 or len(value) > 8:
+            raise serializers.ValidationError('El DNI debe tener entre 7 y 8 dígitos')
+        return value
+    
+    def update(self, instance, validated_data):
+        """Actualizar empleado"""
+        from inventario.models import Deposito
+        
+        # Si se actualiza el depósito
+        if 'deposito' in validated_data:
+            deposito_id = validated_data.pop('deposito')
+            try:
+                deposito = Deposito.objects.get(id=deposito_id)
+                instance.deposito = deposito
+            except Deposito.DoesNotExist:
+                raise serializers.ValidationError({
+                    'deposito': 'El depósito especificado no existe'
+                })
+        
+        # Actualizar otros campos
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        instance.save()
+        return instance

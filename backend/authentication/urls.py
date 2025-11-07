@@ -8,7 +8,11 @@ from .views import (
     EmpleadoProfileView,
     ProvinciasProxyView,
     LocalidadesProxyView,
-    ChangePasswordView
+    ChangePasswordView,
+    EmpleadoListCreateView,
+    EmpleadoDetailView,
+    RolesListView,
+    EstadisticasEmpleadosView
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -32,6 +36,12 @@ urlpatterns = [
     
     # Cambio de contraseña
     path('change-password/', ChangePasswordView.as_view(), name='change_password'),
+    
+    # Gestión de Empleados (endpoints para el frontend)
+    path('empleados/', EmpleadoListCreateView.as_view(), name='empleado_list_create'),
+    path('empleados/estadisticas/', EstadisticasEmpleadosView.as_view(), name='empleado_estadisticas'),
+    path('empleados/roles/', RolesListView.as_view(), name='roles_list'),
+    path('empleados/<int:pk>/', EmpleadoDetailView.as_view(), name='empleado_detail'),
     
     # Proxy para API Georef (resolver CORS)
     path('provincias/', ProvinciasProxyView.as_view(), name='provincias_proxy'),

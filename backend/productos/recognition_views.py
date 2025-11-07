@@ -48,19 +48,13 @@ def reconocer_productos_imagen(request):
                 'error': f'Error procesando la imagen: {str(e)}'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Obtener el depósito del usuario (si es cajero)
+        # Obtener el depósito del usuario (si es empleado)
         deposito_id = None
         try:
-            if hasattr(request.user, 'supermercado'):
-                # Es un empleado cajero
-                from empleados.models import Empleado
-                empleado = Empleado.objects.filter(
-                    email=request.user.email,
-                    supermercado=request.user.supermercado
-                ).first()
-                if empleado and empleado.deposito:
-                    deposito_id = empleado.deposito.id
-                    logger.info(f"📦 Depósito del usuario: {deposito_id}")
+            from authentication.models import EmpleadoUser
+            if isinstance(request.user, EmpleadoUser) and request.user.deposito:
+                deposito_id = request.user.deposito.id
+                logger.info(f"📦 Depósito del usuario: {deposito_id}")
         except Exception as e:
             logger.warning(f"⚠️ Error obteniendo depósito: {str(e)}")
             # No es crítico, continuamos sin depósito

@@ -522,25 +522,29 @@ export async function obtenerEmpleados(token: string, filtros?: {
   if (filtros?.search) params.append('search', filtros.search);
   
   const queryString = params.toString();
-  const path = queryString ? `/api/empleados/?${queryString}` : '/api/empleados/';
+  const path = queryString ? `/api/auth/empleados/?${queryString}` : '/api/auth/empleados/';
   
-  const result = await apiFetch<{count: number, results: Empleado[]}>(path, {
+  const result = await apiFetch<Empleado[] | {count: number, results: Empleado[]}>(path, {
     method: 'GET',
     token
   });
   
+  // Manejar tanto respuesta paginada como array directo
+  if (Array.isArray(result)) {
+    return result;
+  }
   return result.results || [];
 }
 
 export async function obtenerEmpleado(id: number, token: string): Promise<Empleado> {
-  return apiFetch<Empleado>(`/api/empleados/${id}/`, {
+  return apiFetch<Empleado>(`/api/auth/empleados/${id}/`, {
     method: 'GET',
     token
   });
 }
 
 export async function crearEmpleado(data: EmpleadoCreate, token: string): Promise<Empleado> {
-  return apiFetch<Empleado>('/api/empleados/', {
+  return apiFetch<Empleado>('/api/auth/empleados/', {
     method: 'POST',
     body: data,
     token
@@ -548,7 +552,7 @@ export async function crearEmpleado(data: EmpleadoCreate, token: string): Promis
 }
 
 export async function actualizarEmpleado(id: number, data: Partial<EmpleadoCreate>, token: string): Promise<Empleado> {
-  return apiFetch<Empleado>(`/api/empleados/${id}/`, {
+  return apiFetch<Empleado>(`/api/auth/empleados/${id}/`, {
     method: 'PUT',
     body: data,
     token
@@ -556,14 +560,14 @@ export async function actualizarEmpleado(id: number, data: Partial<EmpleadoCreat
 }
 
 export async function eliminarEmpleado(id: number, token: string): Promise<void> {
-  return apiFetch<void>(`/api/empleados/${id}/`, {
+  return apiFetch<void>(`/api/auth/empleados/${id}/`, {
     method: 'DELETE',
     token
   });
 }
 
 export async function obtenerRolesDisponibles(token: string): Promise<{ roles: Role[] }> {
-  return apiFetch<{ success: boolean; roles: Role[] }>('/api/empleados/roles/', {
+  return apiFetch<{ success: boolean; roles: Role[] }>('/api/auth/empleados/roles/', {
     method: 'GET',
     token
   });
@@ -579,7 +583,7 @@ export async function obtenerEstadisticasEmpleados(token: string): Promise<Estad
       empleados_por_puesto: Array<{ puesto: string; total: number }>;
       empleados_por_deposito: Array<{ id: number; nombre: string; total_empleados: number }>;
     };
-  }>('/api/empleados/estadisticas/', {
+  }>('/api/auth/empleados/estadisticas/', {
     method: 'GET',
     token
   });

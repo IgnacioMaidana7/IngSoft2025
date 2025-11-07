@@ -326,8 +326,8 @@ class VentaViewSet(ModelViewSet):
                     venta.ticket_pdf_generado = True
                     venta.save(update_fields=['ticket_pdf_generado'])
                 except Exception as e:
-                    print(f"Error generando PDF: {e}")
                     # No fallar la venta por error en PDF
+                    pass
                 
                 # Enviar por WhatsApp si se solicita (implementar después)
                 if serializer.validated_data.get('enviar_whatsapp') and venta.cliente_telefono:
@@ -405,20 +405,12 @@ def obtener_productos_disponibles(request):
     """Obtener lista de productos disponibles para venta"""
     try:
         # Determinar el supermercado y depósito según el tipo de usuario
-        if hasattr(request.user, 'supermercado'):
+        from authentication.models import EmpleadoUser
+        
+        if isinstance(request.user, EmpleadoUser):
             # Es un empleado (cajero/reponedor)
             cajero_supermercado = request.user.supermercado
-            
-            # Obtener el depósito asignado al empleado
-            from empleados.models import Empleado
-            try:
-                empleado = Empleado.objects.get(
-                    email=request.user.email,
-                    supermercado=cajero_supermercado
-                )
-                deposito_empleado = empleado.deposito
-            except Empleado.DoesNotExist:
-                deposito_empleado = None
+            deposito_empleado = request.user.deposito
         else:
             # Es un admin de supermercado
             cajero_supermercado = request.user
@@ -497,15 +489,13 @@ def buscar_productos(request):
             cajero_supermercado = request.user.supermercado
             
             # Obtener el depósito asignado al empleado
-            from empleados.models import Empleado
-            try:
-                empleado = Empleado.objects.get(
-                    email=request.user.email,
-                    supermercado=cajero_supermercado
-                )
-                deposito_empleado = empleado.deposito
-            except Empleado.DoesNotExist:
-                deposito_empleado = None
+        # Determinar el supermercado y depósito según el tipo de usuario
+        from authentication.models import EmpleadoUser
+        
+        if isinstance(request.user, EmpleadoUser):
+            # Es un empleado (cajero/reponedor)
+            cajero_supermercado = request.user.supermercado
+            deposito_empleado = request.user.deposito
         else:
             # Es un admin de supermercado
             cajero_supermercado = request.user

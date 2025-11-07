@@ -83,6 +83,15 @@ class Transferencia(models.Model):
         verbose_name="Administrador"
     )
     
+    empleado_creador = models.ForeignKey(
+        'authentication.EmpleadoUser',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='transferencias_realizadas',
+        verbose_name="Empleado que realizó la transferencia"
+    )
+    
     fecha_transferencia = models.DateTimeField(
         default=timezone.now,
         verbose_name="Fecha de Transferencia"

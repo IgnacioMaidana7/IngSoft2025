@@ -31,6 +31,14 @@ def validate_logo_size(value):
 class User(AbstractUser):
     """Modelo de usuario personalizado para el sistema"""
     
+    # Rol del usuario (por defecto es administrador del supermercado)
+    rol = models.CharField(
+        max_length=50,
+        default='ADMIN',
+        verbose_name="Rol",
+        help_text="Rol del usuario en el sistema"
+    )
+    
     # Información del supermercado
     nombre_supermercado = models.CharField(
         max_length=200, 
@@ -90,7 +98,9 @@ class User(AbstractUser):
             self.cuil = validate_cuil(self.cuil)
     
     def save(self, *args, **kwargs):
-        self.full_clean()
+        # Solo validar CUIL, no el logo (Django lo valida automáticamente)
+        if self.cuil:
+            self.cuil = validate_cuil(self.cuil)
         super().save(*args, **kwargs)
     
     def __str__(self):
@@ -125,6 +135,15 @@ class EmpleadoUser(AbstractUser):
         verbose_name="Supermercado"
     )
     
+    # Relación con el depósito
+    deposito = models.ForeignKey(
+        'inventario.Deposito',
+        on_delete=models.CASCADE,
+        related_name='empleados_usuarios',
+        verbose_name="Depósito",
+        help_text="Depósito donde trabaja el empleado"
+    )
+    
     # Email ya está incluido en AbstractUser
     email = models.EmailField(
         unique=True,
@@ -139,6 +158,7 @@ class EmpleadoUser(AbstractUser):
     # Metadatos
     activo = models.BooleanField(default=True)
     fecha_registro = models.DateTimeField(auto_now_add=True)
+    fecha_modificacion = models.DateTimeField(auto_now=True)
     
     class Meta:
         verbose_name = "Usuario Empleado"
@@ -167,6 +187,24 @@ class EmpleadoUser(AbstractUser):
     def get_nombre_completo(self):
         """Retorna el nombre completo del empleado"""
         return f"{self.nombre} {self.apellido}"
+    
+    def clean(self):
+        """Validaciones adicionales del modelo"""
+        super().clean()
+        
+        # Validar DNI
+        if self.dni:
+            dni_clean = re.sub(r'[\s.]', '', str(self.dni))
+            if not dni_clean.isdigit():
+                raise ValidationError({"dni": "El DNI debe contener solo números"})
+            if len(dni_clean) < 7 or len(dni_clean) > 8:
+                raise ValidationError({"dni": "El DNI debe tener entre 7 y 8 dígitos"})
+            self.dni = dni_clean
+        
+        # Verificar que el depósito pertenezca al mismo supermercado
+        if self.deposito and self.supermercado:
+            if self.deposito.supermercado != self.supermercado:
+                raise ValidationError("El depósito debe pertenecer al mismo supermercado")
     
     def __str__(self):
         return f"{self.get_nombre_completo()} - {self.puesto} ({self.supermercado.nombre_supermercado})"
